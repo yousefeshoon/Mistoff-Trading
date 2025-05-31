@@ -21,7 +21,7 @@ DATABASE_NAME = "trades.db"
 
 # نسخه فعلی دیتابیس که انتظار داریم برنامه با آن کار کند
 # هر زمان شمای دیتابیس را تغییر دادید، این عدد را زیاد کنید
-DATABASE_SCHEMA_VERSION = 2 # مثلا: نسخه 1 برای جدول trades، نسخه 2 برای جدول error_list
+DATABASE_SCHEMA_VERSION = 3 # مثلا: نسخه 1 برای جدول trades، نسخه 2 برای جدول error_list
 
 
 def _get_db_version(cursor):
@@ -100,6 +100,13 @@ def migrate_database():
             """)
             _set_db_version(conn, cursor, 2)
             current_db_version = 2
+        if current_db_version < 3:
+            print("Migrating to version 3: Adding 'size' column to 'trades' table.")
+            # اضافه کردن ستون size
+            cursor.execute("ALTER TABLE trades ADD COLUMN size REAL DEFAULT 0.0;")
+            # از REAL برای اعداد اعشاری و DEFAULT 0.0 برای مقادیر پیش‌فرض استفاده می‌کنیم.
+            _set_db_version(conn, cursor, 3)
+            current_db_version = 3
 
         # اگر در آینده نیاز به مهاجرت‌های بیشتری بود:
         # if current_db_version < 3:
@@ -117,16 +124,16 @@ def migrate_database():
     finally:
         conn.close()
 
-def add_trade(date, time, symbol, entry, exit, profit, errors):
+def add_trade(date, time, symbol, entry, exit, profit, errors, size): # size اضافه شد
     """
     یک ترید جدید به جدول trades اضافه می‌کند.
     """
     conn, cursor = connect_db()
     try:
         cursor.execute("""
-            INSERT INTO trades (date, time, symbol, entry, exit, profit, errors)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (date, time, symbol, entry, exit, profit, errors))
+            INSERT INTO trades (date, time, symbol, entry, exit, profit, errors, size)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (date, time, symbol, entry, exit, profit, errors, size)) # size اضافه شد
         conn.commit()
         return True
     except sqlite3.Error as e:
@@ -141,7 +148,7 @@ def get_all_trades():
     """
     conn, cursor = connect_db()
     try:
-        cursor.execute("SELECT id, date, time, symbol, entry, exit, profit, errors FROM trades ORDER BY date ASC, time ASC")
+        cursor.execute("SELECT id, date, time, symbol, entry, exit, size, profit, errors FROM trades ORDER BY date ASC, time ASC") # ترتیب ستون‌ها هماهنگ شد
         trades = cursor.fetchall()
         return trades
     except sqlite3.Error as e:

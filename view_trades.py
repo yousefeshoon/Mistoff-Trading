@@ -39,12 +39,18 @@ def show_trades_window(root):
     trades_win.title("همه‌ی تریدها")
     trades_win.geometry("950x450")
 
-    columns = ("id", "date", "time", "symbol", "entry", "exit", "profit", "errors")
+    columns = ("id", "date", "time", "symbol", "entry", "exit", "size", "profit", "errors") # size اضافه شد
     tree = ttk.Treeview(trades_win, columns=columns, show="headings", selectmode="extended")
 
     for col in columns:
         tree.heading(col, text=col)
-        tree.column(col, width=100 if col != "errors" else 300)
+         # تنظیم عرض ستون‌ها
+        if col == "errors":
+            tree.column(col, width=300)
+        elif col == "size": # اضافه کردن تنظیم عرض برای size
+            tree.column(col, width=60)
+        else:
+            tree.column(col, width=100)
 
     tree.column("id", width=50)  # ID کوچکتر
 

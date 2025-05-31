@@ -45,7 +45,8 @@ def save_trade(event=None):
     time = entry_time.get()
     symbol = entry_symbol.get()
     entry = entry_entry.get()
-    exit_price = entry_exit.get() # اسم متغیر رو تغییر دادم تا با 'exit' تابع collision نکنه
+    exit_price = entry_exit.get()
+    size = entry_size.get()
     profit = profit_var.get()
     selected_errors = [error for error, var in error_vars.items() if var.get()]
     
@@ -67,7 +68,12 @@ def save_trade(event=None):
 
     # ذخیره ترید جدید - حالا از db_manager استفاده می‌کنیم
     # دقت کن که 'exit' تابع داخلی پایتون هست، بهتره اسم متغیر رو عوض کنیم. من اینجا به exit_price تغییر دادم.
-    if not db_manager.add_trade(date, time, symbol, entry if entry else None, exit_price if exit_price else None, profit, ', '.join(selected_errors)):
+    if not db_manager.add_trade(date, time, symbol, 
+                                 entry if entry else None, 
+                                 exit_price if exit_price else None, 
+                                 profit, 
+                                 ', '.join(selected_errors),
+                                 float(size) if size else 0.0):
         messagebox.showerror("خطا", "خطایی در ذخیره ترید رخ داد.")
         return
     
@@ -95,13 +101,14 @@ def save_trade(event=None):
 
 
 def clear_fields():
-    entry_date.set_date('') # این خط ممکنه ارور بده اگر date_pattern درست نباشه یا dateEntry خالی باشه
+    entry_date.set_date('') 
     entry_time.delete(0, tk.END)
     entry_symbol.delete(0, tk.END)
     entry_symbol.insert(0, "US30")
     entry_entry.delete(0, tk.END)
     entry_exit.delete(0, tk.END)
-    profit_var.set("Profit") # پیش‌فرض به Profit
+    entry_size.delete(0, tk.END) # اضافه کردن این خط
+    profit_var.set("Profit")
     for var in error_vars.values(): # دقت کن که .values() اضافه کردم
         var.set(False)
 
@@ -308,11 +315,15 @@ add_labeled_entry(3, "Entry (optional):", entry_entry)
 entry_exit = tk.Entry(main_frame, width=30)
 add_labeled_entry(4, "Exit (optional):", entry_exit)
 
+# Size
+entry_size = tk.Entry(main_frame, width=30)
+add_labeled_entry(5, "Size (optional):", entry_size) # سطر 5 برای Size
+
 # سود/ضرر/RF
 profit_var = tk.StringVar()
 profit_dropdown = ttk.Combobox(main_frame, textvariable=profit_var, values=["Profit", "Loss", "RF"], width=27)
 profit_dropdown.current(0)
-add_labeled_entry(5, "Profit / RF / Loss:", profit_dropdown)
+add_labeled_entry(6, "Profit / RF / Loss:", profit_dropdown)
 
 # افزودن ایراد جدید
 #entry_new_error = tk.Entry(main_frame, width=30)
@@ -322,16 +333,16 @@ add_labeled_entry(5, "Profit / RF / Loss:", profit_dropdown)
 #btn_add_error.grid(row=6, column=2, padx=5)
 
 # لیست چک‌باکس ایرادات
-tk.Label(main_frame, text="Select Errors:", anchor='w').grid(row=6, column=0, sticky='ne', padx=5, pady=(10, 0))
+tk.Label(main_frame, text="Select Errors:", anchor='w').grid(row=7, column=0, sticky='ne', padx=5, pady=(10, 0))
 error_frame = tk.Frame(main_frame)
-error_frame.grid(row=6, column=1, columnspan=2, sticky='w', pady=(10, 0))
+error_frame.grid(row=7, column=1, columnspan=2, sticky='w', pady=(10, 0))
 error_names = []
 error_vars = {}
 refresh_error_checkboxes() # حتماً بعد از ساخت error_frame صدا زده بشه
 
 # دکمه ذخیره
 btn_save = tk.Button(main_frame, text="Save Trade", command=save_trade, width=20)
-btn_save.grid(row=7, column=0, columnspan=3, pady=20)
+btn_save.grid(row=8, column=0, columnspan=3, pady=20)
 
 # فریم افقی برای دکمه‌ها
 button_frame = tk.Frame(root)
