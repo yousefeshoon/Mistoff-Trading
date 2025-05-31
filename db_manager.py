@@ -4,66 +4,38 @@ import sqlite3
 import sys
 import os 
 
-# تابع کمکی برای پیدا کردن مسیر فایل‌ها در حالت کامپایل‌شده
 def get_resource_path(relative_path):
-    """
-    مسیر صحیح یک فایل را در محیط توسعه یا پس از کامپایل با PyInstaller برمی‌گرداند.
-    """
-    if hasattr(sys, '_MEIPASS'): # اگر برنامه با PyInstaller کامپایل شده باشد
+    if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
 
-# حالا DATABASE_NAME را با استفاده از این تابع تعریف می‌کنیم
-DATABASE_NAME = get_resource_path("trades.db")
 DATABASE_NAME = "trades.db"
 
-DATABASE_NAME = "trades.db"
-
-# نسخه فعلی دیتابیس که انتظار داریم برنامه با آن کار کند
-# هر زمان شمای دیتابیس را تغییر دادید، این عدد را زیاد کنید
-DATABASE_SCHEMA_VERSION = 3 # مثلا: نسخه 1 برای جدول trades، نسخه 2 برای جدول error_list
-
+DATABASE_SCHEMA_VERSION = 7 
 
 def _get_db_version(cursor):
-    """
-    نسخه شمای دیتابیس را از جدول db_version دریافت می‌کند.
-    اگر جدول وجود نداشت یا خالی بود، 0 را برمی‌گرداند.
-    """
-    cursor.execute("PRAGMA user_version;") # این پرگما برای مدیریت نسخه خودکار SQLite است
-    # اما برای نسخه شمای خودمان بهتر است از یک جدول سفارشی استفاده کنیم.
-
-    # ابتدا چک می‌کنیم که جدول db_version وجود دارد یا نه
+    cursor.execute("PRAGMA user_version;")
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='db_version';")
     if not cursor.fetchone():
-        return 0 # اگر جدول db_version وجود نداشت، یعنی دیتابیس خیلی قدیمی است یا تازه ساخته شده.
-
+        return 0 
     try:
         cursor.execute("SELECT version FROM db_version WHERE id = 1")
         version = cursor.fetchone()
         return version[0] if version else 0
     except sqlite3.Error:
-        return 0 # در صورت خطا در خواندن نسخه، 0 را برمی‌گرداند (یعنی نیاز به مهاجرت از ابتدا دارد)
+        return 0 
 
 def _set_db_version(conn, cursor, version):
-    """
-    نسخه شمای دیتابیس را در جدول db_version ذخیره می‌کند.
-    """
     cursor.execute("CREATE TABLE IF NOT EXISTS db_version (id INTEGER PRIMARY KEY, version INTEGER)")
     cursor.execute("INSERT OR REPLACE INTO db_version (id, version) VALUES (1, ?)", (version,))
     conn.commit()
 
 def connect_db():
-    """
-    به دیتابیس متصل می‌شود و شیء اتصال و مکان‌نما را برمی‌گرداند.
-    """
     conn = sqlite3.connect(DATABASE_NAME)
-    conn.row_factory = sqlite3.Row # این خط باعث می‌شود نتایج کوئری‌ها به صورت دیکشنری قابل دسترسی باشند
+    conn.row_factory = sqlite3.Row 
     return conn, conn.cursor()
 
 def migrate_database():
-    """
-    وظیفه این تابع، اعمال مهاجرت‌های دیتابیس بر اساس نسخه شمای آن است.
-    """
     conn, cursor = connect_db()
     current_db_version = _get_db_version(cursor)
 
@@ -71,7 +43,6 @@ def migrate_database():
     print(f"Expected DB Schema Version: {DATABASE_SCHEMA_VERSION}")
 
     try:
-        # مهاجرت از نسخه 0 به 1: ایجاد جدول trades (اگر وجود نداشت)
         if current_db_version < 1:
             print("Migrating to version 1: Creating 'trades' table.")
             cursor.execute("""
@@ -89,7 +60,6 @@ def migrate_database():
             _set_db_version(conn, cursor, 1)
             current_db_version = 1
 
-        # مهاجرت از نسخه 1 به 2: ایجاد جدول error_list (اگر وجود نداشت)
         if current_db_version < 2:
             print("Migrating to version 2: Creating 'error_list' table.")
             cursor.execute("""
@@ -100,40 +70,80 @@ def migrate_database():
             """)
             _set_db_version(conn, cursor, 2)
             current_db_version = 2
+        
         if current_db_version < 3:
             print("Migrating to version 3: Adding 'size' column to 'trades' table.")
-            # اضافه کردن ستون size
             cursor.execute("ALTER TABLE trades ADD COLUMN size REAL DEFAULT 0.0;")
-            # از REAL برای اعداد اعشاری و DEFAULT 0.0 برای مقادیر پیش‌فرض استفاده می‌کنیم.
             _set_db_version(conn, cursor, 3)
             current_db_version = 3
+        
+        if current_db_version < 4:
+            print("Migrating to version 4: Adding 'position_id' column to 'trades' table.")
+            cursor.execute("ALTER TABLE trades ADD COLUMN position_id TEXT;")
+            cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_trades_position_id ON trades (position_id) WHERE position_id IS NOT NULL;")
+            _set_db_version(conn, cursor, 4)
+            current_db_version = 4
 
-        # اگر در آینده نیاز به مهاجرت‌های بیشتری بود:
-        # if current_db_version < 3:
-        #     print("Migrating to version 3: Add new column to trades table.")
-        #     cursor.execute("ALTER TABLE trades ADD COLUMN new_column TEXT DEFAULT '';")
-        #     _set_db_version(conn, cursor, 3)
-        #     current_db_version = 3
+        if current_db_version < 5:
+            print("Migrating to version 5: Adding 'type' column to 'trades' table.")
+            cursor.execute("ALTER TABLE trades ADD COLUMN type TEXT DEFAULT '';")
+            _set_db_version(conn, cursor, 5)
+            current_db_version = 5
+
+        if current_db_version < 6: 
+            print("Migrating to version 6: Adding 'volume' column to 'trades' table (deprecated, will be removed in v7).")
+            cursor.execute("PRAGMA table_info(trades);")
+            columns = [col[1] for col in cursor.fetchall()]
+            if 'volume' not in columns:
+                cursor.execute("ALTER TABLE trades ADD COLUMN volume REAL DEFAULT 0.0;")
+            _set_db_version(conn, cursor, 6)
+            current_db_version = 6
+        
+        if current_db_version < 7:
+            print("Migrating to version 7: Removing 'volume' column from 'trades' table.")
+            cursor.execute("""
+                CREATE TABLE trades_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT NOT NULL,
+                    time TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    entry REAL,
+                    exit REAL,
+                    profit TEXT NOT NULL,
+                    errors TEXT,
+                    size REAL DEFAULT 0.0,
+                    position_id TEXT,
+                    type TEXT DEFAULT ''
+                );
+            """)
+            cursor.execute("""
+                INSERT INTO trades_new (id, date, time, symbol, entry, exit, profit, errors, size, position_id, type)
+                SELECT id, date, time, symbol, entry, exit, profit, errors, size, position_id, type
+                FROM trades;
+            """)
+            cursor.execute("DROP TABLE trades;")
+            cursor.execute("ALTER TABLE trades_new RENAME TO trades;")
+            cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_trades_position_id ON trades (position_id) WHERE position_id IS NOT NULL;")
+
+            _set_db_version(conn, cursor, 7)
+            current_db_version = 7
 
         conn.commit()
         print("Database migration complete. DB is up to date.")
 
     except sqlite3.Error as e:
         print(f"Error during database migration: {e}")
-        conn.rollback() # در صورت خطا، تغییرات را برگردان
+        conn.rollback() 
     finally:
         conn.close()
 
-def add_trade(date, time, symbol, entry, exit, profit, errors, size): # size اضافه شد
-    """
-    یک ترید جدید به جدول trades اضافه می‌کند.
-    """
+def add_trade(date, time, symbol, entry, exit, profit, errors, size, position_id=None, trade_type=None): 
     conn, cursor = connect_db()
     try:
         cursor.execute("""
-            INSERT INTO trades (date, time, symbol, entry, exit, profit, errors, size)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (date, time, symbol, entry, exit, profit, errors, size)) # size اضافه شد
+            INSERT INTO trades (date, time, symbol, entry, exit, profit, errors, size, position_id, type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (date, time, symbol, entry, exit, profit, errors, size, position_id, trade_type)) 
         conn.commit()
         return True
     except sqlite3.Error as e:
@@ -145,10 +155,13 @@ def add_trade(date, time, symbol, entry, exit, profit, errors, size): # size ا�
 def get_all_trades():
     """
     تمام تریدها را از جدول trades بازیابی می‌کند.
+    ترتیب ستون‌ها: id, date, time, symbol, entry, exit, profit, errors, size, position_id, type (ترتیب دیتابیس).
     """
     conn, cursor = connect_db()
     try:
-        cursor.execute("SELECT id, date, time, symbol, entry, exit, size, profit, errors FROM trades ORDER BY date ASC, time ASC") # ترتیب ستون‌ها هماهنگ شد
+        # **برگشت به ترتیب ستون‌های اصلی دیتابیس:**
+        # این ترتیب همان ترتیبی است که در INSERT و CREATE TABLE استفاده می‌شود.
+        cursor.execute("SELECT id, date, time, symbol, entry, exit, profit, errors, size, position_id, type FROM trades ORDER BY date ASC, time ASC") 
         trades = cursor.fetchall()
         return trades
     except sqlite3.Error as e:
@@ -158,9 +171,6 @@ def get_all_trades():
         conn.close()
 
 def delete_trade(trade_id):
-    """
-    یک ترید مشخص را از جدول trades حذف می‌کند.
-    """
     conn, cursor = connect_db()
     try:
         cursor.execute("DELETE FROM trades WHERE id = ?", (trade_id,))
@@ -173,14 +183,11 @@ def delete_trade(trade_id):
         conn.close()
 
 def get_loss_trades_errors():
-    """
-    خطاهای مربوط به تریدهای زیان‌ده را بازیابی می‌کند.
-    """
     conn, cursor = connect_db()
     try:
         cursor.execute("SELECT errors FROM trades WHERE profit = 'Loss'")
         rows = cursor.fetchall()
-        return [row[0] for row in rows] # فقط ستون errors را برمی‌گرداند
+        return [row[0] for row in rows] 
     except sqlite3.Error as e:
         print(f"خطا در دریافت خطاهای تریدهای زیان‌ده: {e}")
         return []
@@ -188,9 +195,6 @@ def get_loss_trades_errors():
         conn.close()
 
 def get_total_trades_count():
-    """
-    تعداد کل تریدها را برمی‌گرداند.
-    """
     conn, cursor = connect_db()
     try:
         cursor.execute("SELECT COUNT(*) FROM trades")
@@ -202,22 +206,12 @@ def get_total_trades_count():
     finally:
         conn.close()
 
-# این تابع برای اطمینان از وجود جدول در شروع برنامه استفاده می‌شود
-if __name__ == '__main__':
-    migrate_database() # حالا تابع migrate_database را صدا می‌زنیم
-    print("Database schema checked and migrated if necessary.")
-
-# db_manager.py (ادامه کد قبلی، اینا رو به انتهای فایل اضافه کن)
-
 def add_error_to_list(error_text):
-    """
-    یک خطای جدید به جدول error_list اضافه می‌کند اگر وجود نداشته باشد.
-    """
     conn, cursor = connect_db()
     try:
         cursor.execute("INSERT OR IGNORE INTO error_list (error) VALUES (?)", (error_text,))
         conn.commit()
-        return True # اگر با موفقیت اضافه شد یا از قبل وجود داشت
+        return True 
     except sqlite3.Error as e:
         print(f"خطا در افزودن خطا به لیست: {e}")
         return False
@@ -225,9 +219,6 @@ def add_error_to_list(error_text):
         conn.close()
 
 def get_all_errors():
-    """
-    تمام خطاها را از جدول error_list بازیابی می‌کند.
-    """
     conn, cursor = connect_db()
     try:
         cursor.execute("SELECT error FROM error_list ORDER BY error ASC")
@@ -240,9 +231,6 @@ def get_all_errors():
         conn.close()
 
 def get_all_errors_with_id():
-    """
-    تمام خطاها را به همراه ID آن‌ها از جدول error_list بازیابی می‌کند.
-    """
     conn, cursor = connect_db()
     try:
         cursor.execute("SELECT id, error FROM error_list ORDER BY error ASC")
@@ -255,15 +243,12 @@ def get_all_errors_with_id():
         conn.close()
 
 def get_error_usage_counts():
-    """
-    تعداد دفعات استفاده از هر خطا را در جدول trades محاسبه می‌کند.
-    """
     conn, cursor = connect_db()
     error_counts = {}
     try:
         cursor.execute("SELECT errors FROM trades")
         for row in cursor.fetchall():
-            if row['errors']: # از row['errors'] استفاده می‌کنیم چون row_factory فعال است
+            if row['errors']: 
                 for err in row['errors'].split(", "):
                     error_counts[err] = error_counts.get(err, 0) + 1
         return error_counts
@@ -274,9 +259,6 @@ def get_error_usage_counts():
         conn.close()
 
 def delete_error_from_list(error_id):
-    """
-    یک خطا را از جدول error_list حذف می‌کند.
-    """
     conn, cursor = connect_db()
     try:
         cursor.execute("DELETE FROM error_list WHERE id=?", (error_id,))
@@ -289,21 +271,14 @@ def delete_error_from_list(error_id):
         conn.close()
 
 def rename_error(error_id, old_name, new_name):
-    """
-    نام یک خطا را در جدول error_list تغییر می‌دهد و همچنین در جدول trades آن را به‌روزرسانی می‌کند.
-    """
     conn, cursor = connect_db()
     try:
-        # 1. بررسی اینکه نام جدید در error_list وجود دارد یا نه
         cursor.execute("SELECT COUNT(*) FROM error_list WHERE error = ? AND id != ?", (new_name, error_id))
         if cursor.fetchone()[0] > 0:
-            return "duplicate" # نام جدید تکراری است
+            return "duplicate" 
 
-        # 2. به‌روزرسانی نام خطا در جدول error_list
         cursor.execute("UPDATE error_list SET error=? WHERE id=?", (new_name, error_id))
 
-        # 3. پیدا کردن تمام تریدهایی که این خطا توش هست و به‌روزرسانی آن‌ها
-        # ابتدا تریدهایی که این خطا را دارند را پیدا می‌کنیم
         cursor.execute("SELECT id, errors FROM trades")
         trades_to_update = []
         for trade_id, error_string in cursor.fetchall():
@@ -312,7 +287,6 @@ def rename_error(error_id, old_name, new_name):
                 updated_errors_list = [new_name if e == old_name else e for e in errors_list]
                 trades_to_update.append((", ".join(updated_errors_list), trade_id))
         
-        # حالا تریدها را به‌روزرسانی می‌کنیم
         for updated_error_string, trade_id in trades_to_update:
              cursor.execute("UPDATE trades SET errors=? WHERE id=?", (updated_error_string, trade_id))
 
@@ -323,14 +297,11 @@ def rename_error(error_id, old_name, new_name):
         return "duplicate"
     except sqlite3.Error as e:
         print(f"خطا در ویرایش عنوان: {e}")
-        return str(e) # برگرداندن پیغام خطا
+        return str(e) 
     finally:
         conn.close()
 
 def get_profit_trades_count():
-    """
-    تعداد تریدهای سودده را از جدول trades بازیابی می‌کند.
-    """
     conn, cursor = connect_db()
     try:
         cursor.execute("SELECT COUNT(*) FROM trades WHERE profit = 'Profit'")
@@ -343,9 +314,6 @@ def get_profit_trades_count():
         conn.close()
 
 def get_loss_trades_count():
-    """
-    تعداد تریدهای زیان‌ده را از جدول trades بازیابی می‌کند.
-    """
     conn, cursor = connect_db()
     try:
         cursor.execute("SELECT COUNT(*) FROM trades WHERE profit = 'Loss'")
@@ -357,22 +325,24 @@ def get_loss_trades_count():
     finally:
         conn.close()
 
-def check_duplicate_trade(date, time):
-    """
-    بررسی می‌کند که آیا تریدی با تاریخ و ساعت مشخص از قبل وجود دارد یا خیر.
-    """
+def check_duplicate_trade(date=None, time=None, position_id=None): 
     conn, cursor = connect_db()
     try:
-        cursor.execute("SELECT COUNT(*) FROM trades WHERE date = ? AND time = ?", (date, time))
-        return cursor.fetchone()[0] > 0
+        if position_id is not None: 
+            cursor.execute("SELECT COUNT(*) FROM trades WHERE position_id = ?", (position_id,))
+            return cursor.fetchone()[0] > 0
+        elif date is not None and time is not None: 
+            cursor.execute("SELECT COUNT(*) FROM trades WHERE date = ? AND time = ?", (date, time,))
+            return cursor.fetchone()[0] > 0
+        else:
+            print("Error: check_duplicate_trade requires either position_id or both date and time.")
+            return False
     except sqlite3.Error as e:
         print(f"خطا در بررسی ترید تکراری: {e}")
-        return False # در صورت خطا، فرض می‌کنیم تکراری نیست تا برنامه ادامه پیدا کند
+        return False
     finally:
         conn.close()
 
-# این تابع برای اطمینان از وجود جدول در شروع برنامه استفاده می‌شود
-# این خط از قبل هم در db_manager.py بود
 if __name__ == '__main__':
-    migrate_database() # حالا تابع migrate_database را صدا می‌زنیم
+    migrate_database() 
     print("Database schema checked and migrated if necessary.")
