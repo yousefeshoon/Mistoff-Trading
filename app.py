@@ -31,7 +31,7 @@ APP_VERSION = version_info.__version__
 # ساخت پنجره اصلی
 root = tk.Tk()
 root.iconbitmap(os.path.join(os.path.dirname(__file__), "icon.ico")) 
-root.title(f"Trade Journal - {APP_VERSION}") 
+root.title(f"MistOff Trading - {APP_VERSION}") 
 root.geometry("450x700") 
 
 main_frame = tk.Frame(root)
