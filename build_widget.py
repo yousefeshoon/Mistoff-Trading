@@ -44,17 +44,17 @@ def get_current_version_from_file():
 WIDGET_SCRIPT = "error_widget.py"
 WIDGET_ICON = "icon.ico" # از همان آیکون اصلی استفاده می‌کنیم
 
-def build_widget():
+def build_widget(version_to_use): # اضافه کردن پارامتر version_to_use
     """
     ویجت error_widget.py را به صورت یک فایل اجرایی مستقل (exe) بیلد می‌کند.
     """
-    # نسخه فعلی را می‌خوانیم (بدون افزایش دادن، چون build.py این کار را می‌کند)
-    current_version = get_current_version_from_file()
+    # نسخه را از پارامتر ورودی می‌گیریم، نه از فایل (چون build_total آن را افزایش داده)
+    current_version = version_to_use
 
     print(f"Building {WIDGET_SCRIPT} as standalone widget (Version: {current_version})...")
 
     # نام فایل اجرایی خروجی - اینجا تغییر اعمال می‌شود!
-    widget_exe_name = f"dist/Trade_Journal_Error_Widget_{current_version}.exe" # نام جدید با اضافه شدن ورژن
+    widget_exe_name = f"dist/MistOff_Trading_Widget_{current_version}.exe" # نام جدید با اضافه شدن ورژن
 
     # دستور PyInstaller برای بیلد یک فایل مستقل، بدون پنجره کنسول و با آیکون
     pyinstaller_cmd = [
@@ -94,4 +94,11 @@ def build_widget():
     print("Cleanup complete.")
 
 if __name__ == "__main__":
-    build_widget()
+    # اگر build_widget.py به تنهایی اجرا شود، نسخه را از آرگومان‌های خط فرمان یا فایل می‌خواند
+    if len(sys.argv) > 1:
+        version_from_args = sys.argv[1]
+        build_widget(version_from_args)
+    else:
+        # اگر بدون آرگومان اجرا شد، نسخه را از فایل می‌خواند (بدون افزایش)
+        current_version_for_standalone = get_current_version_from_file()
+        build_widget(current_version_for_standalone)

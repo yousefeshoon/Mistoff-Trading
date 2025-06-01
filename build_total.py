@@ -3,7 +3,7 @@ import subprocess
 import sys
 import re
 
-# تابع خواندن و افزایش نسخه (کپی شده از build.py)
+# تابع خواندن و افزایش نسخه
 # این تابع فقط مسئول افزایش نسخه در version_info.py است
 def read_and_increment_version():
     """
@@ -66,12 +66,11 @@ if __name__ == "__main__":
     new_version = read_and_increment_version()
     print(f"نسخه جدید: {new_version}\n")
 
-    # مرحله 2: اجرای build.py برای بیلد برنامه اصلی
+    # مرحله 2: اجرای build.py برای بیلد برنامه اصلی و ارسال نسخه به آن
     print("--- در حال اجرای build.py برای برنامه اصلی ---")
     try:
-        # subprocess.run را مستقیما به فایل پایتون هدایت می کنیم
-        # و از capture_output=True برای دیدن خروجی استفاده می کنیم
-        result_main = subprocess.run([sys.executable, "build.py"], capture_output=True, text=True, check=True)
+        # حالا نسخه جدید رو به build.py پاس میدیم
+        result_main = subprocess.run([sys.executable, "build.py", new_version], capture_output=True, text=True, check=True)
         print("خروجی build.py:")
         print(result_main.stdout)
         if result_main.stderr:
@@ -88,10 +87,11 @@ if __name__ == "__main__":
 
     print("\n")
 
-    # مرحله 3: اجرای build_widget.py برای بیلد ویجت مستقل
+    # مرحله 3: اجرای build_widget.py برای بیلد ویجت مستقل و ارسال نسخه به آن
     print("--- در حال اجرای build_widget.py برای ویجت مستقل ---")
     try:
-        result_widget = subprocess.run([sys.executable, "build_widget.py"], capture_output=True, text=True, check=True)
+        # حالا نسخه جدید رو به build_widget.py پاس میدیم
+        result_widget = subprocess.run([sys.executable, "build_widget.py", new_version], capture_output=True, text=True, check=True)
         print("خروجی build_widget.py:")
         print(result_widget.stdout)
         if result_widget.stderr:
