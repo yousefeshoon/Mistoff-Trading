@@ -205,21 +205,11 @@ def get_all_trades():
     """
     conn, cursor = connect_db()
     trades_list = []
-    # print("DEBUG_DB: شروع دریافت تریدها از دیتابیس.")
     try:
         cursor.execute("SELECT id, date, time, symbol, entry, exit, profit, errors, size, position_id, type FROM trades ORDER BY date ASC, time ASC") 
         rows = cursor.fetchall()
-        # print(f"DEBUG_DB: {len(rows)} ردیف از دیتابیس خوانده شد.")
         for row in rows:
-            # تبدیل رشته‌ها به Decimal هنگام بازیابی
-            # اگر مقدار None (NULL در DB) یا رشته خالی بود، None در نظر می‌گیریم.
-            # این تبدیل‌ها را روی خود شی row انجام می‌دهیم تا در view_trades قابل دسترسی با نام باشند.
-            
-            # ایجاد یک شیء Row قابل ویرایش (یا حداقل dict مانند) برای تغییر مقادیر
-            # مستقیم Row رو تغییر نمیدیم، چون Row immutable هست.
-            # به جای tuple، یک دیکشنری می‌سازیم و مقادیر Decimal رو توش قرار میدیم.
-            # بعد، این دیکشنری رو به trades_list اضافه می‌کنیم.
-            processed_row = dict(row) # تبدیل Row به dict برای قابلیت تغییر
+            processed_row = dict(row) 
             
             entry_decimal = None
             if processed_row['entry'] is not None and processed_row['entry'] != '':
@@ -245,10 +235,9 @@ def get_all_trades():
                     size_decimal = Decimal('0.0') 
             processed_row['size'] = size_decimal
 
-            trades_list.append(processed_row) # حالا دیکشنری رو اضافه می‌کنیم
+            trades_list.append(processed_row) 
             
-        # print(f"DEBUG_DB: {len(trades_list)} ترید برای نمایش آماده شد.")
-        return trades_list # حالا لیستی از دیکشنری‌ها برمی‌گردانیم
+        return trades_list 
     except InvalidOperation as e:
         print(f"DEBUG_DB_ERROR: خطای کلی InvalidOperation هنگام بازیابی تریدها: {e}")
         return []
@@ -431,7 +420,6 @@ def check_duplicate_trade(date=None, time=None, position_id=None):
     finally:
         conn.close()
 
-# >>> شروع تغییرات جدید
 def update_trades_errors(trade_ids, errors_string):
     """
     فیلد 'errors' را برای لیستی از تریدهای مشخص به‌روزرسانی می‌کند.
@@ -446,11 +434,9 @@ def update_trades_errors(trade_ids, errors_string):
 
     conn, cursor = connect_db()
     try:
-        # ساخت یک رشته برای (?, ?, ...) به تعداد trade_ids
         placeholders = ','.join('?' * len(trade_ids))
         query = f"UPDATE trades SET errors = ? WHERE id IN ({placeholders})"
         
-        # اجرای کوئری با errors_string به عنوان اولین پارامتر و سپس trade_ids
         cursor.execute(query, (errors_string, *trade_ids))
         conn.commit()
         return True
@@ -476,6 +462,62 @@ def get_trade_errors_by_id(trade_id):
     except sqlite3.Error as e:
         print(f"خطا در دریافت خطاهای ترید با ID {trade_id}: {e}")
         return None
+    finally:
+        conn.close()
+
+# >>> شروع تغییرات جدید
+def get_errors_for_export():
+    """
+    position_id و errors را برای تمام تریدهایی که فیلد errors آنها خالی نیست، بازیابی می‌کند.
+    مناسب برای خروجی گرفتن و بازیابی.
+    """
+    conn, cursor = connect_db()
+    try:
+        cursor.execute("SELECT position_id, errors FROM trades WHERE errors IS NOT NULL AND errors != ''")
+        return cursor.fetchall() # برمی‌گرداند لیستی از تاپل‌ها: [(pos_id1, errors1), (pos_id2, errors2), ...]
+    except sqlite3.Error as e:
+        print(f"خطا در دریافت خطاهای تریدها برای خروجی: {e}")
+        return []
+    finally:
+        conn.close()
+
+def import_errors_by_position_id(error_data_list):
+    """
+    خطاهای تریدها را بر اساس position_id به‌روزرسانی می‌کند.
+    اگر position_id وجود نداشته باشد، آن ردیف نادیده گرفته می‌شود.
+    Args:
+        error_data_list (list): لیستی از دیکشنری‌ها، هر دیکشنری شامل 'position_id' و 'errors'.
+                                مثال: [{'position_id': '12345', 'errors': 'خطا1, خطا2'}]
+    Returns:
+        int: تعداد رکوردهایی که با موفقیت به‌روزرسانی شدند.
+    """
+    conn, cursor = connect_db()
+    updated_count = 0
+    try:
+        for item in error_data_list:
+            position_id = item.get('position_id')
+            errors = item.get('errors')
+            
+            if position_id is None or errors is None:
+                continue 
+            
+            cursor.execute("UPDATE trades SET errors = ? WHERE position_id = ?", (errors, position_id))
+            if cursor.rowcount > 0:
+                updated_count += 1
+            
+            # اطمینان از اضافه شدن خطاهای جدید به error_list
+            if errors:
+                for error_item in errors.split(','):
+                    error_text = error_item.strip()
+                    if error_text:
+                        cursor.execute("INSERT OR IGNORE INTO error_list (error) VALUES (?)", (error_text,))
+
+        conn.commit()
+        return updated_count
+    except sqlite3.Error as e:
+        print(f"خطا در وارد کردن خطاهای تریدها بر اساس Position ID: {e}")
+        conn.rollback()
+        return 0
     finally:
         conn.close()
 # <<< پایان تغییرات جدید
