@@ -1,14 +1,37 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import db_manager 
+from decimal import Decimal 
 
 def show_trades_window(root):
     def load_trades():
         tree.delete(*tree.get_children())
-        trades = db_manager.get_all_trades() # حالا db_manager.get_all_trades() ترتیب ستون‌ها رو بر اساس نیاز ما برمی‌گردونه
+        trades = db_manager.get_all_trades() 
         for row in trades:
-            # list(row) به صورت پیش‌فرض مقادیر رو به همون ترتیبی که در SELECT هستن، برمی‌گردونه.
-            tree.insert('', tk.END, values=list(row)) 
+            display_values = []
+            # اطمینان حاصل می‌کنیم که ترتیب نمایش دقیقاً مطابق با columns تعریف شده باشد
+            # و مقادیر Decimal و None را هندل می‌کنیم.
+            display_values.append(row['id'])
+            display_values.append(row['position_id'] if row['position_id'] is not None else '') # برای position_id
+            display_values.append(row['date'])
+            display_values.append(row['time'])
+            display_values.append(row['symbol'])
+            display_values.append(row['type'] if row['type'] is not None else '') # برای type
+            
+            # هندل کردن Decimal و None برای size, entry, exit, profit
+            size_val = row['size']
+            display_values.append(f"{size_val:.2f}" if isinstance(size_val, Decimal) else (''))
+
+            entry_val = row['entry']
+            display_values.append(f"{entry_val:.4f}" if isinstance(entry_val, Decimal) else (''))
+
+            exit_val = row['exit']
+            display_values.append(f"{exit_val:.4f}" if isinstance(exit_val, Decimal) else (''))
+            
+            display_values.append(row['profit'])
+            display_values.append(row['errors'] if row['errors'] is not None else '')
+
+            tree.insert('', tk.END, values=display_values) 
 
     def delete_selected():
         selected_items = tree.selection()
@@ -18,6 +41,7 @@ def show_trades_window(root):
         confirm = messagebox.askyesno("تأیید حذف", "آیا از حذف رکوردهای انتخاب‌شده مطمئن هستید؟")
         if confirm:
             for item in selected_items:
+                # شناسه ترید از اولین ستون Treeview (ستون id) گرفته می‌شود
                 trade_id = tree.item(item)['values'][0]
                 if db_manager.delete_trade(trade_id):
                     pass 
@@ -29,23 +53,39 @@ def show_trades_window(root):
     trades_win.title("همه‌ی تریدها")
     trades_win.geometry("1000x450") 
 
-    # **تغییر اصلی در این تابع:**
-    # تعریف ستون‌ها با ترتیب جدید برای نمایش،
-    # که دقیقاً با خروجی `db_manager.get_all_trades()` (ترتیب دیتابیس) مطابقت دارد.
-    columns = ("id", "date", "time", "symbol", "entry", "exit", "profit", "errors", "size", "position_id", "type") 
-    tree = ttk.Treeview(trades_win, columns=columns, show="headings", selectmode="extended")
+    tree_frame = tk.Frame(trades_win)
+    tree_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+    # ترتیب ستون‌ها طبق درخواست قبلی
+    columns = ("id", "position_id", "date", "time", "symbol", "type", "size", "entry", "exit", "profit", "errors") 
+    tree = ttk.Treeview(tree_frame, columns=columns, show="headings", selectmode="extended")
+
+    vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
+    tree.configure(yscrollcommand=vsb.set)
+
+    tree.grid(row=0, column=0, sticky="nsew")
+    vsb.grid(row=0, column=1, sticky="ns")
+
+    tree_frame.grid_rowconfigure(0, weight=1)
+    tree_frame.grid_columnconfigure(0, weight=1)
 
     for col in columns:
-        tree.heading(col, text=col)
+        tree.heading(col, text=col.replace("_", " ").title()) 
         # تنظیم عرض ستون‌ها برای نمایش بهتر
         if col == "id":
             tree.column(col, width=40, anchor="center")
+        elif col == "position_id": 
+            tree.column(col, width=120, anchor="center")
         elif col == "date":
             tree.column(col, width=90, anchor="center")
         elif col == "time":
             tree.column(col, width=60, anchor="center")
         elif col == "symbol":
             tree.column(col, width=70, anchor="center")
+        elif col == "type": 
+            tree.column(col, width=60, anchor="center")
+        elif col == "size": 
+            tree.column(col, width=60, anchor="center")
         elif col == "entry":
             tree.column(col, width=80, anchor="center")
         elif col == "exit":
@@ -54,16 +94,8 @@ def show_trades_window(root):
             tree.column(col, width=70, anchor="center")
         elif col == "errors":
             tree.column(col, width=250, anchor="w") 
-        elif col == "size": # حالا size اینجا هست
-            tree.column(col, width=60, anchor="center")
-        elif col == "position_id":
-            tree.column(col, width=120, anchor="center") 
-        elif col == "type": # حالا type اینجا هست
-            tree.column(col, width=60, anchor="center")
         else:
             tree.column(col, width=80, anchor="center") 
-
-    tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
     rtl_text = "\u200f💡 با نگهداشتن دکمه کنترل یا شیفت میتونید چندتایی انتخاب کنید"
     hint_label = tk.Label(trades_win, text=rtl_text, fg="black")

@@ -3,6 +3,7 @@
 import sqlite3
 import sys
 import os 
+from decimal import Decimal, InvalidOperation 
 
 def get_resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
@@ -11,7 +12,7 @@ def get_resource_path(relative_path):
 
 DATABASE_NAME = "trades.db"
 
-DATABASE_SCHEMA_VERSION = 7 
+DATABASE_SCHEMA_VERSION = 8 
 
 def _get_db_version(cursor):
     cursor.execute("PRAGMA user_version;")
@@ -127,10 +128,49 @@ def migrate_database():
 
             _set_db_version(conn, cursor, 7)
             current_db_version = 7
+        
+        if current_db_version < 8:
+            print("Migrating to version 8: Changing 'entry', 'exit', 'size' columns to TEXT for Decimal support.")
+            cursor.execute("""
+                CREATE TABLE trades_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT NOT NULL,
+                    time TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    entry TEXT, 
+                    exit TEXT,  
+                    profit TEXT NOT NULL,
+                    errors TEXT,
+                    size TEXT DEFAULT '0.0', 
+                    position_id TEXT,
+                    type TEXT DEFAULT ''
+                );
+            """)
+            cursor.execute("""
+                INSERT INTO trades_new (id, date, time, symbol, entry, exit, profit, errors, size, position_id, type)
+                SELECT 
+                    id, 
+                    date, 
+                    time, 
+                    symbol, 
+                    -- تبدیل مقادیر REAL قدیمی به TEXT (با هندل کردن NULL)
+                    CASE WHEN entry IS NULL THEN NULL ELSE CAST(entry AS TEXT) END,
+                    CASE WHEN exit IS NULL THEN NULL ELSE CAST(exit AS TEXT) END,
+                    profit, 
+                    errors, 
+                    CASE WHEN size IS NULL THEN '0.0' ELSE CAST(size AS TEXT) END, 
+                    position_id, 
+                    type
+                FROM trades;
+            """)
+            cursor.execute("DROP TABLE trades;")
+            cursor.execute("ALTER TABLE trades_new RENAME TO trades;")
+            cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_trades_position_id ON trades (position_id) WHERE position_id IS NOT NULL;")
+            _set_db_version(conn, cursor, 8)
+            current_db_version = 8
 
         conn.commit()
         print("Database migration complete. DB is up to date.")
-
     except sqlite3.Error as e:
         print(f"Error during database migration: {e}")
         conn.rollback() 
@@ -140,10 +180,15 @@ def migrate_database():
 def add_trade(date, time, symbol, entry, exit, profit, errors, size, position_id=None, trade_type=None): 
     conn, cursor = connect_db()
     try:
+        # مقادیر Decimal باید قبل از ذخیره به string تبدیل شوند
+        entry_str = str(entry) if entry is not None else None
+        exit_str = str(exit) if exit is not None else None
+        size_str = str(size) if size is not None else '0.0' 
+
         cursor.execute("""
             INSERT INTO trades (date, time, symbol, entry, exit, profit, errors, size, position_id, type)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (date, time, symbol, entry, exit, profit, errors, size, position_id, trade_type)) 
+        """, (date, time, symbol, entry_str, exit_str, profit, errors, size_str, position_id, trade_type)) 
         conn.commit()
         return True
     except sqlite3.Error as e:
@@ -156,16 +201,59 @@ def get_all_trades():
     """
     تمام تریدها را از جدول trades بازیابی می‌کند.
     ترتیب ستون‌ها: id, date, time, symbol, entry, exit, profit, errors, size, position_id, type (ترتیب دیتابیس).
+    مقادیر عددی (entry, exit, size) که به صورت TEXT ذخیره شده‌اند، به Decimal تبدیل می‌شوند.
     """
     conn, cursor = connect_db()
+    trades_list = []
+    # print("DEBUG_DB: شروع دریافت تریدها از دیتابیس.")
     try:
-        # **برگشت به ترتیب ستون‌های اصلی دیتابیس:**
-        # این ترتیب همان ترتیبی است که در INSERT و CREATE TABLE استفاده می‌شود.
         cursor.execute("SELECT id, date, time, symbol, entry, exit, profit, errors, size, position_id, type FROM trades ORDER BY date ASC, time ASC") 
-        trades = cursor.fetchall()
-        return trades
+        rows = cursor.fetchall()
+        # print(f"DEBUG_DB: {len(rows)} ردیف از دیتابیس خوانده شد.")
+        for row in rows:
+            # تبدیل رشته‌ها به Decimal هنگام بازیابی
+            # اگر مقدار None (NULL در DB) یا رشته خالی بود، None در نظر می‌گیریم.
+            # این تبدیل‌ها را روی خود شی row انجام می‌دهیم تا در view_trades قابل دسترسی با نام باشند.
+            
+            # ایجاد یک شیء Row قابل ویرایش (یا حداقل dict مانند) برای تغییر مقادیر
+            # مستقیم Row رو تغییر نمیدیم، چون Row immutable هست.
+            # به جای tuple، یک دیکشنری می‌سازیم و مقادیر Decimal رو توش قرار میدیم.
+            # بعد، این دیکشنری رو به trades_list اضافه می‌کنیم.
+            processed_row = dict(row) # تبدیل Row به dict برای قابلیت تغییر
+            
+            entry_decimal = None
+            if processed_row['entry'] is not None and processed_row['entry'] != '':
+                try:
+                    entry_decimal = Decimal(processed_row['entry'])
+                except InvalidOperation:
+                    pass
+            processed_row['entry'] = entry_decimal
+
+            exit_decimal = None
+            if processed_row['exit'] is not None and processed_row['exit'] != '':
+                try:
+                    exit_decimal = Decimal(processed_row['exit'])
+                except InvalidOperation:
+                    pass
+            processed_row['exit'] = exit_decimal
+
+            size_decimal = Decimal('0.0') 
+            if processed_row['size'] is not None and processed_row['size'] != '':
+                try:
+                    size_decimal = Decimal(processed_row['size'])
+                except InvalidOperation:
+                    size_decimal = Decimal('0.0') 
+            processed_row['size'] = size_decimal
+
+            trades_list.append(processed_row) # حالا دیکشنری رو اضافه می‌کنیم
+            
+        # print(f"DEBUG_DB: {len(trades_list)} ترید برای نمایش آماده شد.")
+        return trades_list # حالا لیستی از دیکشنری‌ها برمی‌گردانیم
+    except InvalidOperation as e:
+        print(f"DEBUG_DB_ERROR: خطای کلی InvalidOperation هنگام بازیابی تریدها: {e}")
+        return []
     except sqlite3.Error as e:
-        print(f"خطا در دریافت تریدها: {e}")
+        print(f"DEBUG_DB_ERROR: خطای SQLite در دریافت تریدها: {e}")
         return []
     finally:
         conn.close()

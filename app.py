@@ -7,7 +7,7 @@ import version_info
 import sys
 
 # ایمپورت ماژول mt5_importer
-import mt5_importer # این خط اضافه شد!
+import mt5_importer 
 
 # تابع کمکی برای پیدا کردن مسیر فایل‌ها در حالت کامپایل‌شده
 def get_resource_path(relative_path):
@@ -251,86 +251,34 @@ def edit_errors_window():
 
     refresh_edit_errors_treeview() 
 
-def select_html_file():
+# تابع تغییر نام داده شده و فیلتر فایل‌ها به xlsx تغییر یافت.
+def select_report_file():
     file_path = filedialog.askopenfilename(
-        title="انتخاب فایل گزارش HTML متاتریدر 5",
-        filetypes=[("HTML files", "*.html"), ("All files", "*.*")]
+        title="انتخاب فایل گزارش اکسل متاتریدر 5",
+        filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")]
     )
     if file_path:
-        html_file_path_var.set(file_path) 
-        # نیازی به نمایش messagebox در اینجا نیست.
-        # messagebox.showinfo("فایل انتخاب شد", f"فایل زیر انتخاب شد:\n{file_path}\nبرای وارد کردن، روی دکمه 'Import From HTML' کلیک کنید.")
+        report_file_path_var.set(file_path) 
     else:
-        html_file_path_var.set("") 
-        messagebox.showwarning("انتخاب فایل", "انتخاب فایل گزارش HTML لغو شد.")
+        report_file_path_var.set("") 
+        messagebox.showwarning("انتخاب فایل", "انتخاب فایل گزارش اکسل لغو شد.")
 
-# تابع جدید برای شروع فرآیند ایمپورت واقعی
-def import_trades_from_html():
-    file_path = html_file_path_var.get()
+# تابع تغییر نام داده شده است.
+def import_trades_from_report():
+    file_path = report_file_path_var.get()
     if not file_path:
-        messagebox.showwarning("خطا", "لطفاً ابتدا یک فایل HTML را انتخاب کنید.")
+        messagebox.showwarning("خطا", "لطفاً ابتدا یک فایل گزارش را انتخاب کنید.")
         return
     
     if not os.path.exists(file_path):
         messagebox.showerror("خطا", f"فایل '{file_path}' یافت نشد.")
-        html_file_path_var.set("") # مسیر اشتباه رو پاک کن
+        report_file_path_var.set("") 
         return
 
-    # mt5_importer.import_trades_from_mt5_report_preview # نام تابع رو عوض میکنیم
-    # تابع import_trades_from_mt5_report باید طوری تغییر کنه که فقط داده‌ها رو برگردونه و ذخیره نکنه.
-    # یا یک تابع جدید بنویسیم که فقط پیش‌نمایش بده.
-    
-    # فعلاً به جای ذخیره مستقیم، اطلاعات رو می‌گیریم و نمایش میدیم.
-    # برای این کار، تابع import_trades_from_mt5_report در mt5_importer.py باید
-    # اصلاح بشه تا یک dictionary از نتایج (imported, skipped, total) رو برگردونه،
-    # و نه اینکه خودش مستقیم به دیتابیس اضافه کنه.
-    # سپس، بعد از تأیید کاربر، اون دیکشنری رو به یک تابع دیگه پاس بدیم که ذخیره کنه.
-
-    # یک راه حل موقت برای نمایش اطلاعات بدون ذخیره:
-    # متد اصلی import_trades_from_mt5_report رو صدا میزنیم و خروجیش رو به عنوان پیش‌نمایش استفاده میکنیم.
-    # اما این متد الان خودش ذخیره میکنه. پس باید تغییرش بدیم.
-
-    # راه حل بهتر: یک متد جدید در mt5_importer برای پیش‌نمایش بنویسیم.
-    # یا متد موجود رو طوری تغییر بدیم که یک پارامتر برای 'preview_only' بگیره.
-
-    # برای سادگی فعلاً، فرض می‌کنیم import_trades_from_mt5_report خودش
-    # اطلاعات رو وارد میکنه و بعد از اجرا، تعداد رو از دیتابیس میگیریم و نمایش میدیم.
-    # این حالت "تایید کاربر" رو کامل پوشش نمیده، اما قدم اوله.
-
-    # ---- راه حل اصلی و بهینه (با تغییر mt5_importer.py) ----
-    # در mt5_importer.py، تابع import_trades_from_mt5_report رو به import_trades_from_mt5_report_and_get_stats
-    # تغییر میدیم که یک لیست از تریدهای آماده برای ورود و آمار رو برگردونه.
-    # بعد اینجا آمار رو نمایش میدیم و بعد از تایید، تریدها رو واقعاً اضافه میکنیم.
-
     try:
-        # Step 1: پیش نمایش و گرفتن آمار بدون ذخیره
-        # mt5_importer.py باید تابع جدیدی برای این کار داشته باشد که فقط آمار و داده‌ها را برگرداند.
-        # من تابع فعلی mt5_importer.import_trades_from_mt5_report را فرض می‌کنم که اصلاح شده باشد.
-        
-        # اطلاعات از فایل خوانده می‌شود اما هنوز به دیتابیس اضافه نمی‌شود
-        # mt5_importer.py باید اصلاح شود تا این تابع یک لیست از DataFrame یا دیکشنری تریدها
-        # و آمار (imported_count, skipped_count, total_trades_in_file) را برگرداند.
-        
-        # برای سادگی فعلاً، یک فراخوانی فرضی به تابع جدید (که هنوز ننوشتیم) میگذاریم.
-        # در اینجا، من mt5_importer.import_trades_from_mt5_report را به گونه ای تغییر می دهم
-        # که یک مقدار برگشتی شامل تعداد تریدهای جدید، تکراری و رد شده را برگرداند،
-        # بدون اینکه بلافاصله آنها را به دیتابیس اضافه کند.
-        # این تابع به ما لیستی از تریدها را می دهد که آماده ورود هستند.
-        
-        # یک مثال فرضی از بازگشت مقادیر از mt5_importer:
-        # stats = {'total_in_file': 4, 'new_trades': 2, 'duplicate_trades': 2, 'skipped_errors': 0}
-        
-        # فرض می‌کنیم mt5_importer.import_trades_from_mt5_report
-        # حالا یک تابع جدید به نام process_mt5_report_for_preview دارد
-        # که یک tuple برمی‌گرداند: (list_of_trade_dicts, total_in_file, duplicate_count, error_count)
-        
-        # در mt5_importer.py باید تابع را به این شکل تغییر دهیم:
-        # def process_mt5_report_for_preview(file_path):
-        #    ...
-        #    return prepared_trades_list, total_trades_in_file, skipped_count_duplicate, skipped_count_error
-        
+        # استفاده از mt5_importer برای پردازش فایل اکسل
         prepared_trades_list, total_in_file, duplicate_count, error_count = \
-            mt5_importer.process_mt5_report_for_preview(file_path) # تابع جدید رو صدا میزنیم
+            mt5_importer.process_mt5_report_for_preview(file_path) 
 
         msg = (f"گزارش آماده وارد کردن:\n"
                f"تعداد کل تریدها در فایل: {total_in_file}\n"
@@ -342,11 +290,10 @@ def import_trades_from_html():
         confirm_import = messagebox.askyesno("تأیید وارد کردن اطلاعات", msg)
         
         if confirm_import:
-            # Step 2: اگر کاربر تأیید کرد، حالا واقعاً به دیتابیس اضافه می‌کنیم
             actually_imported_count = mt5_importer.add_prepared_trades_to_db(prepared_trades_list)
             
             messagebox.showinfo("وارد کردن موفق", f"{actually_imported_count} ترید جدید با موفقیت وارد دیتابیس شد.")
-            update_trade_count() # به‌روزرسانی شمارنده تریدها در فرم اصلی
+            update_trade_count() 
             profit_count, loss_count = count_trades_by_type() 
             profit_label.config(text=f"تعداد تریدهای سودده: {profit_count}")
             loss_label.config(text=f"تعداد تریدهای زیان‌ده: {loss_count}")
@@ -415,24 +362,27 @@ btn_save = tk.Button(main_frame, text="Save Trade", command=save_trade, width=20
 btn_save.grid(row=9, column=0, columnspan=3, pady=20)
 
 
-# --- بخش جدید برای وارد کردن فایل HTML ---
-html_import_frame = tk.LabelFrame(root, text="وارد کردن از گزارش MT5") 
-html_import_frame.pack(padx=10, pady=10, fill=tk.X)
+# --- بخش جدید برای وارد کردن فایل Excel ---
+# تغییر LabelFrame از "HTML" به "گزارش MT5"
+report_import_frame = tk.LabelFrame(root, text="وارد کردن از گزارش MT5 (اکسل)") 
+report_import_frame.pack(padx=10, pady=10, fill=tk.X)
 
-html_file_path_var = tk.StringVar() 
+# تغییر نام متغیر از html_file_path_var به report_file_path_var
+report_file_path_var = tk.StringVar() 
 
-tk.Label(html_import_frame, text="فایل گزارش HTML:", anchor='w').grid(row=0, column=0, padx=5, pady=5, sticky='w')
+tk.Label(report_import_frame, text="فایل گزارش اکسل:", anchor='w').grid(row=0, column=0, padx=5, pady=5, sticky='w')
 
-html_path_entry = tk.Entry(html_import_frame, textvariable=html_file_path_var, width=40, state='readonly') 
-html_path_entry.grid(row=0, column=1, padx=5, pady=5, sticky='ew')
+# تغییر نام Entry از html_path_entry به report_path_entry
+report_path_entry = tk.Entry(report_import_frame, textvariable=report_file_path_var, width=40, state='readonly') 
+report_path_entry.grid(row=0, column=1, padx=5, pady=5, sticky='ew')
 
-select_file_btn = tk.Button(html_import_frame, text="انتخاب فایل...", command=select_html_file)
+# تغییر تابع فراخوانی شده از select_html_file به select_report_file
+select_file_btn = tk.Button(report_import_frame, text="انتخاب فایل...", command=select_report_file)
 select_file_btn.grid(row=0, column=2, padx=5, pady=5)
 
-# **تغییر اصلی در اینجا:**
-# دکمه "Import From HTML" حالا به تابع جدید import_trades_from_html متصل شده است.
-import_html_btn = tk.Button(html_import_frame, text="Import From HTML", command=import_trades_from_html) 
-import_html_btn.grid(row=1, column=0, columnspan=3, pady=5)
+# تغییر نام دکمه و تابع فراخوانی شده
+import_report_btn = tk.Button(report_import_frame, text="وارد کردن از گزارش", command=import_trades_from_report) 
+import_report_btn.grid(row=1, column=0, columnspan=3, pady=5)
 
 
 # فریم افقی برای دکمه‌های اصلی (نمایش تریدها و فراوانی خطاها)
