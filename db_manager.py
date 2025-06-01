@@ -431,6 +431,55 @@ def check_duplicate_trade(date=None, time=None, position_id=None):
     finally:
         conn.close()
 
+# >>> شروع تغییرات جدید
+def update_trades_errors(trade_ids, errors_string):
+    """
+    فیلد 'errors' را برای لیستی از تریدهای مشخص به‌روزرسانی می‌کند.
+    Args:
+        trade_ids (list): لیستی از IDهای تریدها.
+        errors_string (str): رشته‌ای شامل خطاهای جدید (جدا شده با کاما و فاصله).
+    Returns:
+        bool: True اگر عملیات موفقیت‌آمیز باشد، False در غیر این صورت.
+    """
+    if not trade_ids:
+        return False
+
+    conn, cursor = connect_db()
+    try:
+        # ساخت یک رشته برای (?, ?, ...) به تعداد trade_ids
+        placeholders = ','.join('?' * len(trade_ids))
+        query = f"UPDATE trades SET errors = ? WHERE id IN ({placeholders})"
+        
+        # اجرای کوئری با errors_string به عنوان اولین پارامتر و سپس trade_ids
+        cursor.execute(query, (errors_string, *trade_ids))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"خطا در به‌روزرسانی خطاهای تریدها: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_trade_errors_by_id(trade_id):
+    """
+    خطاهای یک ترید خاص را بر اساس ID آن برمی‌گرداند.
+    Args:
+        trade_id (int): ID ترید.
+    Returns:
+        str: رشته خطاهای مربوط به ترید، یا None اگر ترید پیدا نشود یا خطایی نداشته باشد.
+    """
+    conn, cursor = connect_db()
+    try:
+        cursor.execute("SELECT errors FROM trades WHERE id = ?", (trade_id,))
+        result = cursor.fetchone()
+        return result['errors'] if result else None
+    except sqlite3.Error as e:
+        print(f"خطا در دریافت خطاهای ترید با ID {trade_id}: {e}")
+        return None
+    finally:
+        conn.close()
+# <<< پایان تغییرات جدید
+
 if __name__ == '__main__':
     migrate_database() 
     print("Database schema checked and migrated if necessary.")
