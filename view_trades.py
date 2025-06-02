@@ -6,11 +6,20 @@ import db_manager
 from decimal import Decimal 
 import json 
 import os 
+import pytz # برای کار با تایم زون
+from datetime import datetime
 
-def show_trades_window(root):
+# تابع اصلی برای نمایش پنجره تریدها
+def show_trades_window(root, refresh_main_errors_callback=None, update_main_timezone_display=None): # اضافه شدن آرگومان‌ها
     def load_trades():
         tree.delete(*tree.get_children())
-        trades = db_manager.get_all_trades() 
+        
+        # دریافت تایم زون فعال از db_manager برای نمایش
+        current_display_timezone = db_manager.get_default_timezone()
+        display_message = f"{current_display_timezone} :منطقه زمانی فعال (برای تغییر، به تنظیمات برنامه بروید. تریدها با این منطقه زمانی نمایش داده میشن)"
+        current_display_timezone_label.config(text=display_message)
+
+        trades = db_manager.get_all_trades(current_display_timezone) # ارسال تایم زون نمایش
         for row in trades:
             display_values = []
             display_values.append(row['id'])
@@ -116,6 +125,9 @@ def show_trades_window(root):
             if db_manager.update_trades_errors(selected_trade_ids, errors_string_to_save):
                 messagebox.showinfo("موفقیت", "خطاهای انتخاب شده با موفقیت به‌روزرسانی شدند.")
                 load_trades()
+                # فراخوانی کال‌بک برای رفرش چک‌باکس‌ها در پنجره اصلی
+                if refresh_main_errors_callback:
+                    refresh_main_errors_callback()
                 popup.destroy()
             else:
                 messagebox.showerror("خطا", "خطایی در به‌روزرسانی خطاها رخ داد.")
@@ -177,7 +189,6 @@ def show_trades_window(root):
         else:
             messagebox.showinfo("لغو", "عملیات ذخیره فایل پشتیبان خطاها لغو شد.") 
 
-    # >>> شروع تغییرات جدید برای وارد کردن خطاها
     def import_errors_from_file():
         file_path = filedialog.askopenfilename(
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
@@ -197,7 +208,6 @@ def show_trades_window(root):
 
             total_records_in_file = len(imported_data)
             
-            # تأیید از کاربر قبل از وارد کردن
             confirm_import = messagebox.askyesno("تأیید وارد کردن خطاها",
                                                   f"فایل انتخاب شده حاوی {total_records_in_file} رکورد خطا است.\n"
                                                   "این عملیات خطاهای موجود برای تریدهای هم‌نام را به‌روزرسانی می‌کند و خطاهای جدید را به لیست خطاها اضافه می‌کند.\n"
@@ -211,15 +221,16 @@ def show_trades_window(root):
             messagebox.showinfo("وارد کردن موفق", 
                                 f"{imported_count} ترید با موفقیت به‌روزرسانی شد.\n"
                                 f"تعداد کل رکوردهای موجود در فایل: {total_records_in_file}")
-            load_trades() # رفرش کردن Treeview بعد از وارد کردن
-            # همچنین refresh_error_checkboxes در app.py باید فراخوانی شود اگر در اینجا نیست.
-            # فعلا اینجا کاری نمی‌کنیم، فرض می‌کنیم با رفرش Treeview مشکل حل میشه یا بعدا در app.py رسیدگی میشه.
+            load_trades() 
+            # فراخوانی کال‌بک برای رفرش چک‌باکس‌ها در پنجره اصلی
+            if refresh_main_errors_callback:
+                refresh_main_errors_callback()
+            
         except json.JSONDecodeError:
             messagebox.showerror("خطا", "فرمت فایل JSON نامعتبر است.")
         except Exception as e:
             messagebox.showerror("خطا", f"خطا در وارد کردن فایل: {e}")
 
-    # --- Tooltip کلاس ---
     class ToolTip:
         def __init__(self, widget, text):
             self.widget = widget
@@ -266,11 +277,15 @@ def show_trades_window(root):
             if self.tip_window:
                 self.tip_window.destroy()
                 self.tip_window = None
-    # --- پایان Tooltip کلاس ---
 
     trades_win = tk.Toplevel(root)
     trades_win.title("همه‌ی تریدها")
     trades_win.geometry("1000x450") 
+
+    # >>> اضافه شدن لیبل نمایش تایم زون
+    current_display_timezone_label = tk.Label(trades_win, text="", fg="blue", font=("Segoe UI", 9, "bold"))
+    current_display_timezone_label.pack(pady=(5, 0))
+    # <<<
 
     tree_frame = tk.Frame(trades_win)
     tree_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -346,9 +361,8 @@ def show_trades_window(root):
     )
     ToolTip(export_errors_btn, tooltip_text_export)
 
-    # دکمه وارد کردن خطاها
     import_errors_btn = tk.Button(left_buttons_frame, text="⬆️ ایمپورت بک‌آپ خطاها ", command=import_errors_from_file)
-    import_errors_btn.pack(side=tk.LEFT, padx=10) # قرار دادن کنار دکمه بک‌آپ
+    import_errors_btn.pack(side=tk.LEFT, padx=10) 
 
     tooltip_text_import = (
         "با استفاده از فایل بک‌آپ خطاها، می‌توانید خطاهای تریدهای قبلی را "
