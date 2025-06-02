@@ -7,6 +7,7 @@ import version_info
 import sys
 import pytz # برای کار با تایم زون
 from datetime import datetime
+from decimal import Decimal, InvalidOperation # برای اعتبارسنجی ورودی RF
 
 # ایمپورت ماژول mt5_importer
 import mt5_importer 
@@ -54,7 +55,7 @@ def save_trade(event=None):
     entry = entry_entry.get()
     exit_price = entry_exit.get()
     size = entry_size.get()
-    profit = profit_var.get()
+    profit = profit_var.get() # این از ComboBox میاد: Profit, Loss, RF
     
     trade_type = trade_type_var.get() 
 
@@ -97,15 +98,39 @@ def save_trade(event=None):
         messagebox.showerror("Missing Error", "برای ترید ضررده، حداقل یک خطا باید انتخاب شود.")
         return
 
+    # اعتبارسنجی ورودی‌های عددی قبل از ذخیره
+    # از Decimal برای دقت بالاتر استفاده می‌کنیم
+    try:
+        entry_val = Decimal(entry) if entry else None
+    except InvalidOperation:
+        messagebox.showerror("خطا", "قیمت ورود نامعتبر است. لطفاً یک عدد وارد کنید.")
+        return
+    
+    try:
+        exit_val = Decimal(exit_price) if exit_price else None
+    except InvalidOperation:
+        messagebox.showerror("خطا", "قیمت خروج نامعتبر است. لطفاً یک عدد وارد کنید.")
+        return
+    
+    try:
+        size_val = Decimal(size) if size else Decimal('0.0')
+    except InvalidOperation:
+        messagebox.showerror("خطا", "سایز نامعتبر است. لطفاً یک عدد وارد کنید.")
+        return
+    
+    # برای تریدهای دستی، actual_profit_amount نداریم، پس None میفرستیم
+    actual_profit_amount_for_manual_trade = None 
+
     if not db_manager.add_trade(date_to_save, time_to_save, symbol, # استفاده از زمان های UTC
-                                 entry if entry else None, 
-                                 exit_price if exit_price else None, 
-                                 profit, 
+                                 entry_val, 
+                                 exit_val, 
+                                 profit, # profit type (Profit, Loss, RF)
                                  ', '.join(selected_errors),
-                                 float(size) if size else 0.0,
+                                 size_val,
                                  position_id=None, 
                                  trade_type=trade_type,
-                                 original_timezone_name=user_timezone_name): # ذخیره تایم زون مبدا ورودی
+                                 original_timezone_name=user_timezone_name,
+                                 actual_profit_amount=actual_profit_amount_for_manual_trade): # مقدار خام سود/ضرر
         messagebox.showerror("خطا", "خطایی در ذخیره ترید رخ داد.")
         return
     
@@ -302,7 +327,6 @@ def import_trades_from_report():
         return
 
     try:
-        # استفاده از mt5_importer برای پردازش فایل اکسل
         prepared_trades_list, total_in_file, duplicate_count, error_count = \
             mt5_importer.process_mt5_report_for_preview(file_path) 
 
@@ -331,7 +355,6 @@ def import_trades_from_report():
         print(f"Detailed import error: {e}")
 
 
-# >>> پنجره تنظیمات منطقه زمانی
 def show_timezone_settings_window():
     settings_win = tk.Toplevel(root)
     settings_win.title("تنظیمات منطقه زمانی")
@@ -340,12 +363,19 @@ def show_timezone_settings_window():
     settings_win.grab_set()
     settings_win.resizable(False, False)
 
+    root_width = root.winfo_width()
+    root_height = root.winfo_height()
+    settings_win_width = 350
+    settings_win_height = 200
+    x = root.winfo_x() + (root_width / 2) - (settings_win_width / 2)
+    y = root.winfo_y() + (root_height / 2) - (settings_win_height / 2)
+    settings_win.geometry(f'{settings_win_width}x{settings_win_height}+{int(x)}+{int(y)}')
+
     frame = tk.Frame(settings_win, padx=15, pady=15)
     frame.pack(fill=tk.BOTH, expand=True)
 
     tk.Label(frame, text="انتخاب منطقه زمانی پیش‌فرض:").grid(row=0, column=0, sticky="w", pady=5, padx=5)
 
-    # لیست تایم زون های پرکاربرد
     common_timezones = [
         'Asia/Tehran',
         'UTC',
@@ -357,22 +387,17 @@ def show_timezone_settings_window():
         'Australia/Sydney',
         'Etc/GMT-3' # برای سازگاری با گزارش MT5 قبلی
     ]
-    # دریافت تایم زون فعلی ذخیره شده
     current_tz = db_manager.get_default_timezone()
     
     tz_var = tk.StringVar(value=current_tz if current_tz in common_timezones else 'Asia/Tehran')
     tz_dropdown = ttk.Combobox(frame, textvariable=tz_var, values=common_timezones, state="readonly", width=30)
     tz_dropdown.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
-    # چک باکس برای ویرایش رکوردهای قبلی - این بخش رو حذف می‌کنیم
-    # چون ویرایش رکوردهای قبلی با تغییر تایم‌زون بسیار پیچیده و مستعد خطا است.
-    # و فرض بر اینه که زمان‌ها در دیتابیس UTC ذخیره میشن و فقط زمان نمایش تغییر می‌کنه.
-
     def save_settings():
         new_tz = tz_var.get()
-        if db_manager.set_default_timezone(new_tz): # ذخیره تایم زون جدید
+        if db_manager.set_default_timezone(new_tz): 
             messagebox.showinfo("موفقیت", "منطقه زمانی با موفقیت ذخیره شد.")
-            update_timezone_display() # بروزرسانی لیبل تایم زون در فرم اصلی
+            update_timezone_display() 
             settings_win.destroy()
         else:
             messagebox.showerror("خطا", "خطایی در ذخیره منطقه زمانی رخ داد.")
@@ -385,7 +410,68 @@ def show_timezone_settings_window():
 
     settings_win.focus_set()
     settings_win.wait_window(settings_win)
-# <<<
+
+def show_rf_threshold_settings_window():
+    rf_win = tk.Toplevel(root)
+    rf_win.title("تنظیم آستانه ریسک فری")
+    rf_win.transient(root)
+    rf_win.grab_set()
+    rf_win.resizable(False, False)
+
+    root_width = root.winfo_width()
+    root_height = root.winfo_height()
+    rf_win_width = 350
+    rf_win_height = 150
+    x = root.winfo_x() + (root_width / 2) - (rf_win_width / 2)
+    y = root.winfo_y() + (root_height / 2) - (rf_win_height / 2)
+    rf_win.geometry(f'{rf_win_width}x{rf_win_height}+{int(x)}+{int(y)}')
+
+    frame = tk.Frame(rf_win, padx=15, pady=15)
+    frame.pack(fill=tk.BOTH, expand=True)
+
+    tk.Label(frame, text="مقدار آستانه برای ترید RF (مثلاً 1.5):").grid(row=0, column=0, sticky="w", pady=5, padx=5)
+    tk.Label(frame, text="اگر سود/ضرر بین ±این مقدار باشد، RF در نظر گرفته می‌شود.", font=("Segoe UI", 8, "italic")).grid(row=1, column=0, columnspan=2, sticky="w", padx=5, pady=(0, 10))
+
+    current_rf_threshold = db_manager.get_rf_threshold()
+    rf_threshold_var = tk.StringVar(value=str(current_rf_threshold)) 
+    rf_entry = tk.Entry(frame, textvariable=rf_threshold_var, width=20)
+    rf_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+
+    def save_rf_settings():
+        new_threshold_str = rf_threshold_var.get().strip()
+        try:
+            new_threshold = Decimal(new_threshold_str)
+            if new_threshold < 0:
+                messagebox.showwarning("خطا", "آستانه ریسک فری نمی‌تواند منفی باشد.")
+                return
+            
+            if db_manager.set_rf_threshold(new_threshold): # ذخیره مقدار جدید
+                messagebox.showinfo("موفقیت", "آستانه ریسک فری با موفقیت ذخیره شد.")
+                # >>> فراخوانی تابع بازبینی و آپدیت تریدها
+                updated_count = db_manager.recalculate_trade_profits()
+                if updated_count > 0:
+                    messagebox.showinfo("بروزرسانی تریدها", f"{updated_count} ترید بر اساس آستانه جدید ریسک فری بروزرسانی شد.")
+                else:
+                    messagebox.showinfo("بروزرسانی تریدها", "هیچ تریدی نیاز به بروزرسانی بر اساس آستانه جدید ریسک فری نداشت.")
+                update_trade_count() # برای بروزرسانی تعداد سود/ضرر/RF در لیبل های اصلی
+                profit_count, loss_count = count_trades_by_type() 
+                profit_label.config(text=f"تعداد تریدهای سودده: {profit_count}")
+                loss_label.config(text=f"تعداد تریدهای زیان‌ده: {loss_count}")
+                # <<<
+                rf_win.destroy()
+            else:
+                messagebox.showerror("خطا", "خطایی در ذخیره آستانه ریسک فری رخ داد.")
+        except InvalidOperation:
+            messagebox.showerror("خطا", "لطفاً یک عدد معتبر برای آستانه ریسک فری وارد کنید.")
+
+    btn_frame_rf_settings = tk.Frame(frame)
+    btn_frame_rf_settings.grid(row=3, column=0, columnspan=2, pady=10)
+
+    tk.Button(btn_frame_rf_settings, text="ذخیره", command=save_rf_settings).pack(side=tk.LEFT, padx=5)
+    tk.Button(btn_frame_rf_settings, text="لغو", command=rf_win.destroy).pack(side=tk.LEFT, padx=5)
+
+    rf_win.focus_set()
+    rf_win.wait_window(rf_win)
 
 
 # --- ویجت‌های فرم اصلی ---
@@ -511,7 +597,8 @@ root.config(menu=menubar)
 settings_menu = tk.Menu(menubar, tearoff=0)
 menubar.add_cascade(label="تنظیمات", menu=settings_menu)
 settings_menu.add_command(label="تنظیم منطقه زمانی...", command=show_timezone_settings_window)
+settings_menu.add_command(label="تعیین آستانه ریسک فری...", command=show_rf_threshold_settings_window) 
 # <<<
 
-update_timezone_display() # نمایش اولیه تایم زون در فرم اصلی
+update_timezone_display() 
 root.mainloop()

@@ -14,7 +14,7 @@ def get_resource_path(relative_path):
 
 DATABASE_NAME = "trades.db"
 
-DATABASE_SCHEMA_VERSION = 9 # افزایش ورژن برای اضافه کردن جدول تنظیمات و تغییرات تایم زون
+DATABASE_SCHEMA_VERSION = 11 # افزایش ورژن برای اضافه کردن actual_profit_amount
 
 def _get_db_version(cursor):
     cursor.execute("PRAGMA user_version;")
@@ -87,7 +87,7 @@ def migrate_database():
             _set_db_version(conn, cursor, 4)
             current_db_version = 4
 
-        if current_db_version < 5:
+        if current_db_version < 5: 
             print("Migrating to version 5: Adding 'type' column to 'trades' table.")
             cursor.execute("ALTER TABLE trades ADD COLUMN type TEXT DEFAULT '';")
             _set_db_version(conn, cursor, 5)
@@ -155,7 +155,6 @@ def migrate_database():
                     date, 
                     time, 
                     symbol, 
-                    -- تبدیل مقادیر REAL قدیمی به TEXT (با هندل کردن NULL)
                     CASE WHEN entry IS NULL THEN NULL ELSE CAST(entry AS TEXT) END,
                     CASE WHEN exit IS NULL THEN NULL ELSE CAST(exit AS TEXT) END,
                     profit, 
@@ -171,7 +170,6 @@ def migrate_database():
             _set_db_version(conn, cursor, 8)
             current_db_version = 8
 
-        # >>> بلاک مهاجرت جدید برای ورژن 9: اضافه کردن جدول settings
         if current_db_version < 9:
             print("Migrating to version 9: Creating 'settings' table and adding 'original_timezone' to trades.")
             cursor.execute("""
@@ -180,18 +178,30 @@ def migrate_database():
                     value TEXT
                 )
             """)
-            # مقدار پیش‌فرض منطقه زمانی را بلافاصله پس از ایجاد جدول درج می‌کنیم
             cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('default_timezone', 'Asia/Tehran'))
-            
-            # اضافه کردن ستون original_timezone به جدول trades
             cursor.execute("ALTER TABLE trades ADD COLUMN original_timezone TEXT DEFAULT '';")
-            
-            # فرض می‌کنیم تریدهای قبلی بر اساس UTC+3:00 (زمان ایران) بودند و این مقدار را برای آن‌ها ست می‌کنیم.
-            cursor.execute("UPDATE trades SET original_timezone = 'Etc/GMT-3' WHERE original_timezone = '';") # این باید معادل UTC+3:00 باشه
-
+            cursor.execute("UPDATE trades SET original_timezone = 'Etc/GMT-3' WHERE original_timezone = '';") 
 
             _set_db_version(conn, cursor, 9)
             current_db_version = 9
+
+        if current_db_version < 10:
+            print("Migrating to version 10: Adding 'rf_threshold' to settings table.")
+            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('rf_threshold', '1.5')) # مقدار پیش فرض 1.5
+            _set_db_version(conn, cursor, 10)
+            current_db_version = 10
+        
+        # >>> بلاک مهاجرت جدید برای ورژن 11: اضافه کردن actual_profit_amount
+        if current_db_version < 11:
+            print("Migrating to version 11: Adding 'actual_profit_amount' column to 'trades' table.")
+            # ستون جدید برای ذخیره مقدار عددی Profit/Loss از گزارش MT5
+            cursor.execute("ALTER TABLE trades ADD COLUMN actual_profit_amount TEXT;")
+            # برای تریدهای موجود، این مقدار را NULL می‌گذاریم، چون از قبل وارد نشده است.
+            # اگر بعدها نیاز به بازسازی این مقادیر از entry/exit بود، باید منطق پیچیده‌ای اضافه شود.
+            # فعلا این فیلد فقط برای تریدهای جدید پر می‌شود.
+
+            _set_db_version(conn, cursor, 11)
+            current_db_version = 11
         # <<< پایان بلاک مهاجرت جدید
             
         conn.commit()
@@ -202,20 +212,19 @@ def migrate_database():
     finally:
         conn.close()
 
-# تابع اضافه کردن ترید به روز شده برای ذخیره زمان در UTC و original_timezone
-def add_trade(date, time, symbol, entry, exit, profit, errors, size, position_id=None, trade_type=None, original_timezone_name=None): 
+# تابع اضافه کردن ترید به روز شده برای ذخیره زمان در UTC، original_timezone و actual_profit_amount
+def add_trade(date, time, symbol, entry, exit, profit, errors, size, position_id=None, trade_type=None, original_timezone_name=None, actual_profit_amount=None): 
     conn, cursor = connect_db()
     try:
         entry_str = str(entry) if entry is not None else None
         exit_str = str(exit) if exit is not None else None
         size_str = str(size) if size is not None else '0.0' 
+        actual_profit_amount_str = str(actual_profit_amount) if actual_profit_amount is not None else None
 
-        # اینجا date و time باید زمان UTC باشند.
-        # original_timezone_name باید تایم زون مبدا این date و time باشه.
         cursor.execute("""
-            INSERT INTO trades (date, time, symbol, entry, exit, profit, errors, size, position_id, type, original_timezone)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (date, time, symbol, entry_str, exit_str, profit, errors, size_str, position_id, trade_type, original_timezone_name)) 
+            INSERT INTO trades (date, time, symbol, entry, exit, profit, errors, size, position_id, type, original_timezone, actual_profit_amount)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (date, time, symbol, entry_str, exit_str, profit, errors, size_str, position_id, trade_type, original_timezone_name, actual_profit_amount_str)) 
         conn.commit()
         return True
     except sqlite3.Error as e:
@@ -233,29 +242,22 @@ def get_all_trades(display_timezone_name):
     conn, cursor = connect_db()
     trades_list = []
     try:
-        # دریافت تایم زون نمایش از pytz
         display_tz = pytz.timezone(display_timezone_name)
 
-        cursor.execute("SELECT id, date, time, symbol, entry, exit, profit, errors, size, position_id, type, original_timezone FROM trades ORDER BY date ASC, time ASC") 
+        # اضافه کردن actual_profit_amount به SELECT
+        cursor.execute("SELECT id, date, time, symbol, entry, exit, profit, errors, size, position_id, type, original_timezone, actual_profit_amount FROM trades ORDER BY date ASC, time ASC") 
         rows = cursor.fetchall()
         for row in rows:
             processed_row = dict(row) 
             
-            # تبدیل زمان UTC ذخیره شده در دیتابیس به تایم زون انتخابی کاربر
-            # فرض می‌کنیم 'date' و 'time' در دیتابیس به صورت UTC ذخیره شده‌اند
             try:
-                # ساخت یک datetime object بدون تایم زون (naive) از تاریخ و زمان UTC
                 utc_naive_dt = datetime.strptime(f"{processed_row['date']} {processed_row['time']}", "%Y-%m-%d %H:%M")
-                # تبدیل به datetime object آگاه به تایم زون (timezone-aware) با UTC
                 utc_aware_dt = pytz.utc.localize(utc_naive_dt)
-                # تبدیل از UTC به تایم زون مورد نظر کاربر برای نمایش
                 display_aware_dt = utc_aware_dt.astimezone(display_tz)
                 processed_row['date'] = display_aware_dt.strftime('%Y-%m-%d')
                 processed_row['time'] = display_aware_dt.strftime('%H:%M')
             except ValueError as ve:
                 print(f"خطا در تبدیل زمان برای ترید {processed_row['id']}: {ve}. تاریخ و زمان اصلی نمایش داده می‌شوند.")
-                # اگر تبدیل ناموفق بود، تاریخ و زمان اصلی دیتابیس (UTC) را نمایش بده.
-                # نیازی به تغییر processed_row['date'] و processed_row['time'] نیست، همان مقادیر UTC استفاده می شوند.
                 pass
             except Exception as e:
                  print(f"خطای غیرمنتظره در تبدیل زمان برای ترید {processed_row['id']}: {e}.")
@@ -284,6 +286,15 @@ def get_all_trades(display_timezone_name):
                 except InvalidOperation:
                     size_decimal = Decimal('0.0') 
             processed_row['size'] = size_decimal
+
+            # actual_profit_amount رو هم به Decimal تبدیل می‌کنیم
+            actual_profit_decimal = None
+            if processed_row['actual_profit_amount'] is not None and processed_row['actual_profit_amount'] != '':
+                try:
+                    actual_profit_decimal = Decimal(processed_row['actual_profit_amount'])
+                except InvalidOperation:
+                    pass
+            processed_row['actual_profit_amount'] = actual_profit_decimal
 
             trades_list.append(processed_row) 
             
@@ -596,6 +607,76 @@ def get_default_timezone():
 
 def set_default_timezone(timezone_name):
     return set_setting('default_timezone', timezone_name)
+
+def get_rf_threshold():
+    threshold_str = get_setting('rf_threshold', '1.5') 
+    try:
+        return Decimal(threshold_str)
+    except InvalidOperation:
+        print(f"Warning: Invalid rf_threshold '{threshold_str}' found in settings. Using default 1.5.")
+        return Decimal('1.5')
+
+def set_rf_threshold(threshold_value):
+    return set_setting('rf_threshold', str(threshold_value))
+
+# تابع مرکزی برای محاسبه نوع Profit/Loss/RF بر اساس مقدار سود و آستانه
+def calculate_profit_type(profit_amount_decimal, rf_threshold_decimal):
+    if rf_threshold_decimal is not None:
+        if profit_amount_decimal >= -rf_threshold_decimal and profit_amount_decimal <= rf_threshold_decimal:
+            return "RF"
+        elif profit_amount_decimal < 0:
+            return "Loss"
+        elif profit_amount_decimal > 0:
+            return "Profit"
+    else: # اگر آستانه تعریف نشده باشد، رفتار پیش فرض (فقط بر اساس 0)
+        if profit_amount_decimal < 0:
+            return "Loss"
+        elif profit_amount_decimal > 0:
+            return "Profit"
+    return "RF" # اگر profit_amount_decimal صفر باشد و آستانه هم نباشد، RF در نظر گرفته شود.
+
+
+# تابع جدید برای بازبینی و به‌روزرسانی تمام تریدها بر اساس آستانه ریسک فری جدید
+def recalculate_trade_profits():
+    conn, cursor = connect_db()
+    updated_count = 0
+    rf_threshold = get_rf_threshold() # آستانه فعلی را از دیتابیس می‌خوانیم
+
+    try:
+        # تریدهایی را انتخاب می‌کنیم که actual_profit_amount دارند
+        cursor.execute("SELECT id, actual_profit_amount FROM trades WHERE actual_profit_amount IS NOT NULL")
+        rows = cursor.fetchall()
+
+        for row in rows:
+            trade_id = row['id']
+            actual_profit_str = row['actual_profit_amount']
+            
+            try:
+                actual_profit_decimal = Decimal(actual_profit_str)
+                new_profit_type = calculate_profit_type(actual_profit_decimal, rf_threshold)
+                
+                # فقط اگر نوع profit تغییر کرده باشد، آپدیت می‌کنیم
+                cursor.execute("SELECT profit FROM trades WHERE id = ?", (trade_id,))
+                current_profit_type = cursor.fetchone()['profit']
+                
+                if current_profit_type != new_profit_type:
+                    cursor.execute("UPDATE trades SET profit = ? WHERE id = ?", (new_profit_type, trade_id))
+                    updated_count += 1
+            except InvalidOperation:
+                print(f"Warning: Could not convert actual_profit_amount '{actual_profit_str}' for trade ID {trade_id} to Decimal. Skipping recalculation for this trade.")
+                continue
+            except Exception as e:
+                print(f"Error recalculating profit for trade ID {trade_id}: {e}. Skipping this trade.")
+                continue
+
+        conn.commit()
+        return updated_count
+    except sqlite3.Error as e:
+        print(f"Error during recalculating trade profits: {e}")
+        conn.rollback()
+        return 0
+    finally:
+        conn.close()
 # <<< پایان توابع جدید
 
 if __name__ == '__main__':
