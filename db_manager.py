@@ -14,31 +14,42 @@ def get_resource_path(relative_path):
 
 DATABASE_NAME = "trades.db"
 
-DATABASE_SCHEMA_VERSION = 11 # افزایش ورژن برای اضافه کردن actual_profit_amount
+# از آنجایی که نرم افزار هنوز منتشر نشده و نگران مهاجرت از نسخه های قدیمی نیستیم،
+# تمام بلاک های مهاجرتی قبلی را در یک شمای نهایی جمع بندی کرده ایم.
+# برای هر تغییر ساختاری جدید در آینده، باید این ورژن را افزایش داده
+# و یک بلاک مهاجرت جدید (با ALTER TABLE) اضافه کنیم.
+DATABASE_SCHEMA_VERSION = 12 
 
 def _get_db_version(cursor):
-    cursor.execute("PRAGMA user_version;")
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='db_version';")
-    if not cursor.fetchone():
-        return 0 
-    try:
-        cursor.execute("SELECT version FROM db_version WHERE id = 1")
-        version = cursor.fetchone()
-        return version[0] if version else 0
-    except sqlite3.Error:
-        return 0 
+    """
+    نسخه فعلی اسکیمای دیتابیس را برمی گرداند.
+    """
+    cursor.execute("CREATE TABLE IF NOT EXISTS db_version (id INTEGER PRIMARY KEY, version INTEGER)")
+    cursor.execute("INSERT OR IGNORE INTO db_version (id, version) VALUES (1, 0)") # مطمئن می شویم همیشه یک ردیف هست
+    cursor.execute("SELECT version FROM db_version WHERE id = 1")
+    version = cursor.fetchone()
+    return version[0] if version else 0
 
 def _set_db_version(conn, cursor, version):
-    cursor.execute("CREATE TABLE IF NOT EXISTS db_version (id INTEGER PRIMARY KEY, version INTEGER)")
+    """
+    نسخه اسکیمای دیتابیس را تنظیم می کند.
+    """
     cursor.execute("INSERT OR REPLACE INTO db_version (id, version) VALUES (1, ?)", (version,))
     conn.commit()
 
 def connect_db():
+    """
+    به دیتابیس متصل شده و اتصال و کِرسور را برمی گرداند.
+    """
     conn = sqlite3.connect(DATABASE_NAME)
     conn.row_factory = sqlite3.Row 
     return conn, conn.cursor()
 
 def migrate_database():
+    """
+    دیتابیس را به آخرین نسخه اسکیمای مورد نیاز مهاجرت می دهد.
+    اگر دیتابیس وجود نداشته باشد، با آخرین اسکیما ساخته می شود.
+    """
     conn, cursor = connect_db()
     current_db_version = _get_db_version(cursor)
 
@@ -46,95 +57,17 @@ def migrate_database():
     print(f"Expected DB Schema Version: {DATABASE_SCHEMA_VERSION}")
 
     try:
-        if current_db_version < 1:
-            print("Migrating to version 1: Creating 'trades' table.")
+        # بلاک مهاجرت برای ایجاد اولیه دیتابیس (ورژن 12)
+        # این بلاک شامل تمام تغییرات اسکیمای قبلی است
+        if current_db_version < 12: # اگر ورژن فعلی کمتر از 12 باشد
+            print("Migrating to version 12: Creating/Updating final schema.")
+            
+            # 1. ایجاد جدول trades با آخرین ساختار
+            # شامل: id, date, time, symbol, entry, exit, profit, errors,
+            #        size, position_id, type, original_timezone, actual_profit_amount
+            # توجه: entry, exit, size و actual_profit_amount از نوع TEXT برای دقت Decimal
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS trades (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    date TEXT NOT NULL,
-                    time TEXT NOT NULL,
-                    symbol TEXT NOT NULL,
-                    entry REAL,
-                    exit REAL,
-                    profit TEXT NOT NULL,
-                    errors TEXT
-                )
-            """)
-            _set_db_version(conn, cursor, 1)
-            current_db_version = 1
-
-        if current_db_version < 2:
-            print("Migrating to version 2: Creating 'error_list' table.")
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS error_list (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    error TEXT UNIQUE
-                )
-            """)
-            _set_db_version(conn, cursor, 2)
-            current_db_version = 2
-        
-        if current_db_version < 3:
-            print("Migrating to version 3: Adding 'size' column to 'trades' table.")
-            cursor.execute("ALTER TABLE trades ADD COLUMN size REAL DEFAULT 0.0;")
-            _set_db_version(conn, cursor, 3)
-            current_db_version = 3
-        
-        if current_db_version < 4:
-            print("Migrating to version 4: Adding 'position_id' column to 'trades' table.")
-            cursor.execute("ALTER TABLE trades ADD COLUMN position_id TEXT;")
-            cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_trades_position_id ON trades (position_id) WHERE position_id IS NOT NULL;")
-            _set_db_version(conn, cursor, 4)
-            current_db_version = 4
-
-        if current_db_version < 5: 
-            print("Migrating to version 5: Adding 'type' column to 'trades' table.")
-            cursor.execute("ALTER TABLE trades ADD COLUMN type TEXT DEFAULT '';")
-            _set_db_version(conn, cursor, 5)
-            current_db_version = 5
-
-        if current_db_version < 6: 
-            print("Migrating to version 6: Adding 'volume' column to 'trades' table (deprecated, will be removed in v7).")
-            cursor.execute("PRAGMA table_info(trades);")
-            columns = [col[1] for col in cursor.fetchall()]
-            if 'volume' not in columns:
-                cursor.execute("ALTER TABLE trades ADD COLUMN volume REAL DEFAULT 0.0;")
-            _set_db_version(conn, cursor, 6)
-            current_db_version = 6
-        
-        if current_db_version < 7:
-            print("Migrating to version 7: Removing 'volume' column from 'trades' table.")
-            cursor.execute("""
-                CREATE TABLE trades_new (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    date TEXT NOT NULL,
-                    time TEXT NOT NULL,
-                    symbol TEXT NOT NULL,
-                    entry REAL,
-                    exit REAL,
-                    profit TEXT NOT NULL,
-                    errors TEXT,
-                    size REAL DEFAULT 0.0,
-                    position_id TEXT,
-                    type TEXT DEFAULT ''
-                );
-            """)
-            cursor.execute("""
-                INSERT INTO trades_new (id, date, time, symbol, entry, exit, profit, errors, size, position_id, type)
-                SELECT id, date, time, symbol, entry, exit, profit, errors, size, position_id, type
-                FROM trades;
-            """)
-            cursor.execute("DROP TABLE trades;")
-            cursor.execute("ALTER TABLE trades_new RENAME TO trades;")
-            cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_trades_position_id ON trades (position_id) WHERE position_id IS NOT NULL;")
-
-            _set_db_version(conn, cursor, 7)
-            current_db_version = 7
-        
-        if current_db_version < 8:
-            print("Migrating to version 8: Changing 'entry', 'exit', 'size' columns to TEXT for Decimal support.")
-            cursor.execute("""
-                CREATE TABLE trades_new (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     date TEXT NOT NULL,
                     time TEXT NOT NULL,
@@ -145,65 +78,42 @@ def migrate_database():
                     errors TEXT,
                     size TEXT DEFAULT '0.0', 
                     position_id TEXT,
-                    type TEXT DEFAULT ''
-                );
+                    type TEXT DEFAULT '',
+                    original_timezone TEXT DEFAULT 'Asia/Tehran', -- پیش فرض 'Asia/Tehran'
+                    actual_profit_amount TEXT
+                )
             """)
-            cursor.execute("""
-                INSERT INTO trades_new (id, date, time, symbol, entry, exit, profit, errors, size, position_id, type)
-                SELECT 
-                    id, 
-                    date, 
-                    time, 
-                    symbol, 
-                    CASE WHEN entry IS NULL THEN NULL ELSE CAST(entry AS TEXT) END,
-                    CASE WHEN exit IS NULL THEN NULL ELSE CAST(exit AS TEXT) END,
-                    profit, 
-                    errors, 
-                    CASE WHEN size IS NULL THEN '0.0' ELSE CAST(size AS TEXT) END, 
-                    position_id, 
-                    type
-                FROM trades;
-            """)
-            cursor.execute("DROP TABLE trades;")
-            cursor.execute("ALTER TABLE trades_new RENAME TO trades;")
+            
+            # ایجاد UNIQUE INDEX برای position_id
             cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_trades_position_id ON trades (position_id) WHERE position_id IS NOT NULL;")
-            _set_db_version(conn, cursor, 8)
-            current_db_version = 8
+            
+            # 2. ایجاد جدول error_list
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS error_list (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    error TEXT UNIQUE
+                )
+            """)
 
-        if current_db_version < 9:
-            print("Migrating to version 9: Creating 'settings' table and adding 'original_timezone' to trades.")
+            # 3. ایجاد جدول settings
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
                     value TEXT
                 )
             """)
-            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('default_timezone', 'Asia/Tehran'))
-            cursor.execute("ALTER TABLE trades ADD COLUMN original_timezone TEXT DEFAULT '';")
-            cursor.execute("UPDATE trades SET original_timezone = 'Etc/GMT-3' WHERE original_timezone = '';") 
-
-            _set_db_version(conn, cursor, 9)
-            current_db_version = 9
-
-        if current_db_version < 10:
-            print("Migrating to version 10: Adding 'rf_threshold' to settings table.")
-            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('rf_threshold', '1.5')) # مقدار پیش فرض 1.5
-            _set_db_version(conn, cursor, 10)
-            current_db_version = 10
-        
-        # >>> بلاک مهاجرت جدید برای ورژن 11: اضافه کردن actual_profit_amount
-        if current_db_version < 11:
-            print("Migrating to version 11: Adding 'actual_profit_amount' column to 'trades' table.")
-            # ستون جدید برای ذخیره مقدار عددی Profit/Loss از گزارش MT5
-            cursor.execute("ALTER TABLE trades ADD COLUMN actual_profit_amount TEXT;")
-            # برای تریدهای موجود، این مقدار را NULL می‌گذاریم، چون از قبل وارد نشده است.
-            # اگر بعدها نیاز به بازسازی این مقادیر از entry/exit بود، باید منطق پیچیده‌ای اضافه شود.
-            # فعلا این فیلد فقط برای تریدهای جدید پر می‌شود.
-
-            _set_db_version(conn, cursor, 11)
-            current_db_version = 11
-        # <<< پایان بلاک مهاجرت جدید
             
+            # 4. درج مقادیر پیش فرض در جدول settings (فقط در صورت عدم وجود)
+            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('default_timezone', 'Asia/Tehran'))
+            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('rf_threshold', '1.5'))
+
+            # پس از اجرای همه تغییرات ساختاری و تنظیمات اولیه، نسخه را به روز می کنیم
+            _set_db_version(conn, cursor, 12)
+            current_db_version = 12
+        
+        # اگر در آینده نیاز به تغییرات جدید داشتید، یک بلاک if current_db_version < 13: اینجا اضافه کنید
+        # و دستورات ALTER TABLE مربوطه را بنویسید، سپس _set_db_version را به 13 تغییر دهید.
+
         conn.commit()
         print("Database migration complete. DB is up to date.")
     except sqlite3.Error as e:
@@ -577,7 +487,7 @@ def import_errors_by_position_id(error_data_list):
     finally:
         conn.close()
 
-# >>> توابع جدید برای مدیریت تنظیمات در دیتابیس
+# توابع جدید برای مدیریت تنظیمات در دیتابیس
 def get_setting(key, default_value=None):
     conn, cursor = connect_db()
     try:
@@ -677,7 +587,6 @@ def recalculate_trade_profits():
         return 0
     finally:
         conn.close()
-# <<< پایان توابع جدید
 
 if __name__ == '__main__':
     migrate_database() 
