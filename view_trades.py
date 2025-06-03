@@ -123,7 +123,7 @@ def show_trades_window(root, refresh_main_errors_callback=None, update_main_time
             errors_string_to_save = ", ".join(selected_errors)
 
             if db_manager.update_trades_errors(selected_trade_ids, errors_string_to_save):
-                messagebox.showinfo("موفقیت", "خطاهای انتخاب شده با موفقیت به‌روزرسانی شدند.")
+                #messagebox.showinfo("موفقیت", "خطاهای انتخاب شده با موفقیت به‌روزرسانی شدند.")
                 load_trades()
                 # فراخوانی کال‌بک برای رفرش چک‌باکس‌ها در پنجره اصلی
                 if refresh_main_errors_callback:
@@ -278,6 +278,20 @@ def show_trades_window(root, refresh_main_errors_callback=None, update_main_time
                 self.tip_window.destroy()
                 self.tip_window = None
 
+    # --- تابع جدید برای هندل کردن دابل کلیک ---
+    def on_double_click(event):
+        item = tree.selection() # آیتم(های) انتخاب شده رو بگیر
+        if item:
+            # اگر فقط یک آیتم انتخاب شده باشه (دابل کلیک روی یک ردیف)
+            if len(item) == 1:
+                trade_id = tree.item(item[0])['values'][0] # ID ترید رو از ستون اول بگیر
+                current_errors = db_manager.get_trade_errors_by_id(trade_id) # خطاهای فعلی ترید رو بگیر
+                show_edit_errors_popup(trades_win, [trade_id], current_errors)
+            else:
+                # اگر چند آیتم انتخاب شده باشه، اما کاربر دابل کلیک کرده
+                # بهتره پیغام بدیم که فقط روی یک رکورد دابل کلیک کنه
+                messagebox.showwarning("ویرایش خطاها", "لطفاً برای ویرایش خطاها، فقط روی یک رکورد دابل کلیک کنید.")
+
     trades_win = tk.Toplevel(root)
     trades_win.title("همه‌ی تریدها")
     trades_win.geometry("1000x450") 
@@ -328,6 +342,9 @@ def show_trades_window(root, refresh_main_errors_callback=None, update_main_time
             tree.column(col, width=250, anchor="w") 
         else:
             tree.column(col, width=80, anchor="center") 
+    
+    # --- اتصال تابع on_double_click به رویداد دابل کلیک روی Treeview ---
+    tree.bind("<Double-1>", on_double_click)
 
     rtl_text = "\u200f💡 با نگهداشتن دکمه کنترل یا شیفت میتونید چندتایی انتخاب کنید"
     hint_label = tk.Label(trades_win, text=rtl_text, fg="black")
