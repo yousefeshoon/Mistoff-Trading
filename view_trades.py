@@ -33,10 +33,10 @@ def show_trades_window(root, refresh_main_errors_callback=None, update_main_time
             display_values.append(f"{size_val:.2f}" if isinstance(size_val, Decimal) else (''))
 
             entry_val = row['entry']
-            display_values.append(f"{entry_val:.4f}" if isinstance(entry_val, Decimal) else (''))
+            display_values.append(f"{entry_val:.2f}" if isinstance(entry_val, Decimal) else (''))
 
             exit_val = row['exit']
-            display_values.append(f"{exit_val:.4f}" if isinstance(exit_val, Decimal) else (''))
+            display_values.append(f"{exit_val:.2f}" if isinstance(exit_val, Decimal) else (''))
             
             display_values.append(row['profit'])
             display_values.append(row['errors'] if row['errors'] is not None else '')
