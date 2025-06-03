@@ -2,9 +2,9 @@
 
 import sqlite3
 import sys
-import os 
-from decimal import Decimal, InvalidOperation 
-import pytz # برای کار با تایم زون ها
+import os
+from decimal import Decimal, InvalidOperation
+import pytz
 from datetime import datetime
 
 def get_resource_path(relative_path):
@@ -18,14 +18,14 @@ DATABASE_NAME = "trades.db"
 # تمام بلاک های مهاجرتی قبلی را در یک شمای نهایی جمع بندی کرده ایم.
 # برای هر تغییر ساختاری جدید در آینده، باید این ورژن را افزایش داده
 # و یک بلاک مهاجرت جدید (با ALTER TABLE) اضافه کنیم.
-DATABASE_SCHEMA_VERSION = 12 
+DATABASE_SCHEMA_VERSION = 13
 
 def _get_db_version(cursor):
     """
     نسخه فعلی اسکیمای دیتابیس را برمی گرداند.
     """
     cursor.execute("CREATE TABLE IF NOT EXISTS db_version (id INTEGER PRIMARY KEY, version INTEGER)")
-    cursor.execute("INSERT OR IGNORE INTO db_version (id, version) VALUES (1, 0)") # مطمئن می شویم همیشه یک ردیف هست
+    cursor.execute("INSERT OR IGNORE INTO db_version (id, version) VALUES (1, 0)")
     cursor.execute("SELECT version FROM db_version WHERE id = 1")
     version = cursor.fetchone()
     return version[0] if version else 0
@@ -42,7 +42,7 @@ def connect_db():
     به دیتابیس متصل شده و اتصال و کِرسور را برمی گرداند.
     """
     conn = sqlite3.connect(DATABASE_NAME)
-    conn.row_factory = sqlite3.Row 
+    conn.row_factory = sqlite3.Row
     return conn, conn.cursor()
 
 def migrate_database():
@@ -57,37 +57,29 @@ def migrate_database():
     print(f"Expected DB Schema Version: {DATABASE_SCHEMA_VERSION}")
 
     try:
-        # بلاک مهاجرت برای ایجاد اولیه دیتابیس (ورژن 12)
-        # این بلاک شامل تمام تغییرات اسکیمای قبلی است
-        if current_db_version < 12: # اگر ورژن فعلی کمتر از 12 باشد
+        if current_db_version < 12:
             print("Migrating to version 12: Creating/Updating final schema.")
             
-            # 1. ایجاد جدول trades با آخرین ساختار
-            # شامل: id, date, time, symbol, entry, exit, profit, errors,
-            #        size, position_id, type, original_timezone, actual_profit_amount
-            # توجه: entry, exit, size و actual_profit_amount از نوع TEXT برای دقت Decimal
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS trades (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     date TEXT NOT NULL,
                     time TEXT NOT NULL,
                     symbol TEXT NOT NULL,
-                    entry TEXT, 
-                    exit TEXT,  
+                    entry TEXT,
+                    exit TEXT,
                     profit TEXT NOT NULL,
                     errors TEXT,
-                    size TEXT DEFAULT '0.0', 
+                    size TEXT DEFAULT '0.0',
                     position_id TEXT,
                     type TEXT DEFAULT '',
-                    original_timezone TEXT DEFAULT 'Asia/Tehran', -- پیش فرض 'Asia/Tehran'
+                    original_timezone TEXT DEFAULT 'Asia/Tehran',
                     actual_profit_amount TEXT
                 )
             """)
             
-            # ایجاد UNIQUE INDEX برای position_id
             cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_trades_position_id ON trades (position_id) WHERE position_id IS NOT NULL;")
             
-            # 2. ایجاد جدول error_list
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS error_list (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -95,7 +87,6 @@ def migrate_database():
                 )
             """)
 
-            # 3. ایجاد جدول settings
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
@@ -103,38 +94,38 @@ def migrate_database():
                 )
             """)
             
-            # 4. درج مقادیر پیش فرض در جدول settings (فقط در صورت عدم وجود)
             cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('default_timezone', 'Asia/Tehran'))
             cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('rf_threshold', '1.5'))
 
-            # پس از اجرای همه تغییرات ساختاری و تنظیمات اولیه، نسخه را به روز می کنیم
             _set_db_version(conn, cursor, 12)
             current_db_version = 12
-        
-        # اگر در آینده نیاز به تغییرات جدید داشتید، یک بلاک if current_db_version < 13: اینجا اضافه کنید
-        # و دستورات ALTER TABLE مربوطه را بنویسید، سپس _set_db_version را به 13 تغییر دهید.
+
+        if current_db_version < 13:
+            print("Migrating to version 13: Adding 'error_frequency_threshold' setting.")
+            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('error_frequency_threshold', '10.0'))
+            _set_db_version(conn, cursor, 13)
+            current_db_version = 13
 
         conn.commit()
         print("Database migration complete. DB is up to date.")
     except sqlite3.Error as e:
         print(f"Error during database migration: {e}")
-        conn.rollback() 
+        conn.rollback()
     finally:
         conn.close()
 
-# تابع اضافه کردن ترید به روز شده برای ذخیره زمان در UTC، original_timezone و actual_profit_amount
-def add_trade(date, time, symbol, entry, exit, profit, errors, size, position_id=None, trade_type=None, original_timezone_name=None, actual_profit_amount=None): 
+def add_trade(date, time, symbol, entry, exit, profit, errors, size, position_id=None, trade_type=None, original_timezone_name=None, actual_profit_amount=None):
     conn, cursor = connect_db()
     try:
         entry_str = str(entry) if entry is not None else None
         exit_str = str(exit) if exit is not None else None
-        size_str = str(size) if size is not None else '0.0' 
+        size_str = str(size) if size is not None else '0.0'
         actual_profit_amount_str = str(actual_profit_amount) if actual_profit_amount is not None else None
 
         cursor.execute("""
             INSERT INTO trades (date, time, symbol, entry, exit, profit, errors, size, position_id, type, original_timezone, actual_profit_amount)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (date, time, symbol, entry_str, exit_str, profit, errors, size_str, position_id, trade_type, original_timezone_name, actual_profit_amount_str)) 
+        """, (date, time, symbol, entry_str, exit_str, profit, errors, size_str, position_id, trade_type, original_timezone_name, actual_profit_amount_str))
         conn.commit()
         return True
     except sqlite3.Error as e:
@@ -143,22 +134,16 @@ def add_trade(date, time, symbol, entry, exit, profit, errors, size, position_id
     finally:
         conn.close()
 
-# تابع get_all_trades به روز شده برای هندل کردن original_timezone و تبدیل به تایم زون انتخابی کاربر
 def get_all_trades(display_timezone_name):
-    """
-    تمام تریدها را از جدول trades بازیابی و زمان‌ها را به display_timezone_name تبدیل می‌کند.
-    مقادیر عددی (entry, exit, size) که به صورت TEXT ذخیره شده‌اند، به Decimal تبدیل می‌شوند.
-    """
     conn, cursor = connect_db()
     trades_list = []
     try:
         display_tz = pytz.timezone(display_timezone_name)
 
-        # اضافه کردن actual_profit_amount به SELECT
-        cursor.execute("SELECT id, date, time, symbol, entry, exit, profit, errors, size, position_id, type, original_timezone, actual_profit_amount FROM trades ORDER BY date ASC, time ASC") 
+        cursor.execute("SELECT id, date, time, symbol, entry, exit, profit, errors, size, position_id, type, original_timezone, actual_profit_amount FROM trades ORDER BY date ASC, time ASC")
         rows = cursor.fetchall()
         for row in rows:
-            processed_row = dict(row) 
+            processed_row = dict(row)
             
             try:
                 utc_naive_dt = datetime.strptime(f"{processed_row['date']} {processed_row['time']}", "%Y-%m-%d %H:%M")
@@ -189,15 +174,14 @@ def get_all_trades(display_timezone_name):
                     pass
             processed_row['exit'] = exit_decimal
 
-            size_decimal = Decimal('0.0') 
+            size_decimal = Decimal('0.0')
             if processed_row['size'] is not None and processed_row['size'] != '':
                 try:
                     size_decimal = Decimal(processed_row['size'])
                 except InvalidOperation:
-                    size_decimal = Decimal('0.0') 
+                    size_decimal = Decimal('0.0')
             processed_row['size'] = size_decimal
 
-            # actual_profit_amount رو هم به Decimal تبدیل می‌کنیم
             actual_profit_decimal = None
             if processed_row['actual_profit_amount'] is not None and processed_row['actual_profit_amount'] != '':
                 try:
@@ -206,9 +190,9 @@ def get_all_trades(display_timezone_name):
                     pass
             processed_row['actual_profit_amount'] = actual_profit_decimal
 
-            trades_list.append(processed_row) 
+            trades_list.append(processed_row)
             
-        return trades_list 
+        return trades_list
     except InvalidOperation as e:
         print(f"DEBUG_DB_ERROR: خطای کلی InvalidOperation هنگام بازیابی تریدها: {e}")
         return []
@@ -235,9 +219,36 @@ def get_loss_trades_errors():
     try:
         cursor.execute("SELECT errors FROM trades WHERE profit = 'Loss'")
         rows = cursor.fetchall()
-        return [row[0] for row in rows] 
+        return [row[0] for row in rows]
     except sqlite3.Error as e:
         print(f"خطا در دریافت خطاهای تریدهای زیان‌ده: {e}")
+        return []
+    finally:
+        conn.close()
+
+def get_profit_trades_errors():
+    conn, cursor = connect_db()
+    try:
+        cursor.execute("SELECT errors FROM trades WHERE profit = 'Profit'")
+        rows = cursor.fetchall()
+        return [row[0] for row in rows]
+    except sqlite3.Error as e:
+        print(f"خطا در دریافت خطاهای تریدهای سودده: {e}")
+        return []
+    finally:
+        conn.close()
+
+def get_all_trades_errors():
+    """
+    دریافت خطاهای تمام تریدها (چه سودده، چه زیان‌ده، چه ریسک‌فری) که فیلد errors آنها خالی نیست.
+    """
+    conn, cursor = connect_db()
+    try:
+        cursor.execute("SELECT errors FROM trades WHERE errors IS NOT NULL AND errors != ''")
+        rows = cursor.fetchall()
+        return [row[0] for row in rows]
+    except sqlite3.Error as e:
+        print(f"خطا در دریافت خطاهای تمام تریدها: {e}")
         return []
     finally:
         conn.close()
@@ -259,7 +270,7 @@ def add_error_to_list(error_text):
     try:
         cursor.execute("INSERT OR IGNORE INTO error_list (error) VALUES (?)", (error_text,))
         conn.commit()
-        return True 
+        return True
     except sqlite3.Error as e:
         print(f"خطا در افزودن خطا به لیست: {e}")
         return False
@@ -296,7 +307,7 @@ def get_error_usage_counts():
     try:
         cursor.execute("SELECT errors FROM trades")
         for row in cursor.fetchall():
-            if row['errors']: 
+            if row['errors']:
                 for err in row['errors'].split(", "):
                     error_counts[err] = error_counts.get(err, 0) + 1
         return error_counts
@@ -323,7 +334,7 @@ def rename_error(error_id, old_name, new_name):
     try:
         cursor.execute("SELECT COUNT(*) FROM error_list WHERE error = ? AND id != ?", (new_name, error_id))
         if cursor.fetchone()[0] > 0:
-            return "duplicate" 
+            return "duplicate"
 
         cursor.execute("UPDATE error_list SET error=? WHERE id=?", (new_name, error_id))
 
@@ -345,7 +356,7 @@ def rename_error(error_id, old_name, new_name):
         return "duplicate"
     except sqlite3.Error as e:
         print(f"خطا در ویرایش عنوان: {e}")
-        return str(e) 
+        return str(e)
     finally:
         conn.close()
 
@@ -373,13 +384,13 @@ def get_loss_trades_count():
     finally:
         conn.close()
 
-def check_duplicate_trade(date=None, time=None, position_id=None): 
+def check_duplicate_trade(date=None, time=None, position_id=None):
     conn, cursor = connect_db()
     try:
-        if position_id is not None: 
+        if position_id is not None:
             cursor.execute("SELECT COUNT(*) FROM trades WHERE position_id = ?", (position_id,))
             return cursor.fetchone()[0] > 0
-        elif date is not None and time is not None: 
+        elif date is not None and time is not None:
             cursor.execute("SELECT COUNT(*) FROM trades WHERE date = ? AND time = ?", (date, time,))
             return cursor.fetchone()[0] > 0
         else:
@@ -441,7 +452,7 @@ def get_errors_for_export():
     conn, cursor = connect_db()
     try:
         cursor.execute("SELECT position_id, errors FROM trades WHERE errors IS NOT NULL AND errors != ''")
-        return cursor.fetchall() # برمی‌گرداند لیستی از تاپل‌ها: [(pos_id1, errors1), (pos_id2, errors2), ...]
+        return cursor.fetchall()
     except sqlite3.Error as e:
         print(f"خطا در دریافت خطاهای تریدها برای خروجی: {e}")
         return []
@@ -466,7 +477,7 @@ def import_errors_by_position_id(error_data_list):
             errors = item.get('errors')
             
             if position_id is None or errors is None:
-                continue 
+                continue
             
             cursor.execute("UPDATE trades SET errors = ? WHERE position_id = ?", (errors, position_id))
             if cursor.rowcount > 0:
@@ -487,7 +498,6 @@ def import_errors_by_position_id(error_data_list):
     finally:
         conn.close()
 
-# توابع جدید برای مدیریت تنظیمات در دیتابیس
 def get_setting(key, default_value=None):
     conn, cursor = connect_db()
     try:
@@ -513,13 +523,13 @@ def set_setting(key, value):
         conn.close()
 
 def get_default_timezone():
-    return get_setting('default_timezone', 'Asia/Tehran') 
+    return get_setting('default_timezone', 'Asia/Tehran')
 
 def set_default_timezone(timezone_name):
     return set_setting('default_timezone', timezone_name)
 
 def get_rf_threshold():
-    threshold_str = get_setting('rf_threshold', '1.5') 
+    threshold_str = get_setting('rf_threshold', '1.5')
     try:
         return Decimal(threshold_str)
     except InvalidOperation:
@@ -529,7 +539,17 @@ def get_rf_threshold():
 def set_rf_threshold(threshold_value):
     return set_setting('rf_threshold', str(threshold_value))
 
-# تابع مرکزی برای محاسبه نوع Profit/Loss/RF بر اساس مقدار سود و آستانه
+def get_error_frequency_threshold():
+    threshold_str = get_setting('error_frequency_threshold', '10.0')
+    try:
+        return Decimal(threshold_str)
+    except InvalidOperation:
+        print(f"Warning: Invalid error_frequency_threshold '{threshold_str}' found in settings. Using default 10.0.")
+        return Decimal('10.0')
+
+def set_error_frequency_threshold(threshold_value):
+    return set_setting('error_frequency_threshold', str(threshold_value))
+
 def calculate_profit_type(profit_amount_decimal, rf_threshold_decimal):
     if rf_threshold_decimal is not None:
         if profit_amount_decimal >= -rf_threshold_decimal and profit_amount_decimal <= rf_threshold_decimal:
@@ -538,22 +558,19 @@ def calculate_profit_type(profit_amount_decimal, rf_threshold_decimal):
             return "Loss"
         elif profit_amount_decimal > 0:
             return "Profit"
-    else: # اگر آستانه تعریف نشده باشد، رفتار پیش فرض (فقط بر اساس 0)
+    else:
         if profit_amount_decimal < 0:
             return "Loss"
         elif profit_amount_decimal > 0:
             return "Profit"
-    return "RF" # اگر profit_amount_decimal صفر باشد و آستانه هم نباشد، RF در نظر گرفته شود.
+    return "RF"
 
-
-# تابع جدید برای بازبینی و به‌روزرسانی تمام تریدها بر اساس آستانه ریسک فری جدید
 def recalculate_trade_profits():
     conn, cursor = connect_db()
     updated_count = 0
-    rf_threshold = get_rf_threshold() # آستانه فعلی را از دیتابیس می‌خوانیم
+    rf_threshold = get_rf_threshold()
 
     try:
-        # تریدهایی را انتخاب می‌کنیم که actual_profit_amount دارند
         cursor.execute("SELECT id, actual_profit_amount FROM trades WHERE actual_profit_amount IS NOT NULL")
         rows = cursor.fetchall()
 
@@ -565,7 +582,6 @@ def recalculate_trade_profits():
                 actual_profit_decimal = Decimal(actual_profit_str)
                 new_profit_type = calculate_profit_type(actual_profit_decimal, rf_threshold)
                 
-                # فقط اگر نوع profit تغییر کرده باشد، آپدیت می‌کنیم
                 cursor.execute("SELECT profit FROM trades WHERE id = ?", (trade_id,))
                 current_profit_type = cursor.fetchone()['profit']
                 
@@ -589,5 +605,5 @@ def recalculate_trade_profits():
         conn.close()
 
 if __name__ == '__main__':
-    migrate_database() 
+    migrate_database()
     print("Database schema checked and migrated if necessary.")
