@@ -123,7 +123,7 @@ def show_error_frequency_widget(parent_window=None):
         root.protocol("WM_DELETE_WINDOW", root.destroy)
 
     root.title(f" فراوانی خطاها - {version_info.__version__}")
-    root.geometry("320x400")
+    root.geometry("320x300")
     
     # متغیر برای نگهداری حالت نمایش انتخاب شده
     # این متغیر باید بعد از تعریف root یا Toplevel ایجاد شود
