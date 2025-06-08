@@ -18,7 +18,7 @@ DATABASE_NAME = "trades.db"
 # تمام بلاک های مهاجرتی قبلی را در یک شمای نهایی جمع بندی کرده ایم.
 # برای هر تغییر ساختاری جدید در آینده، باید این ورژن را افزایش داده
 # و یک بلاک مهاجرت جدید (با ALTER TABLE) اضافه کنیم.
-DATABASE_SCHEMA_VERSION = 14 # <<< افزایش ورژن به 14
+DATABASE_SCHEMA_VERSION = 15 
 
 def _get_db_version(cursor):
     """
@@ -106,15 +106,31 @@ def migrate_database():
             _set_db_version(conn, cursor, 13)
             current_db_version = 13
         
-        # <<< بلاک مهاجرت جدید برای working_days
         if current_db_version < 14:
             print("Migrating to version 14: Adding 'working_days' setting.")
-            # روزهای کاری پیش فرض: دوشنبه تا جمعه (1,2,3,4,5)
-            # دوشنبه = 0, یکشنبه = 6 (معمولی در پایتون و اکثر سیستم‌ها)
-            # پس برای دوشنبه تا جمعه: 0,1,2,3,4
+            # روزهای کاری پیش فرض: دوشنبه تا جمعه (0,1,2,3,4) (0=Monday, 6=Sunday در پایتون)
             cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('working_days', '0,1,2,3,4'))
             _set_db_version(conn, cursor, 14)
             current_db_version = 14
+        
+        # <<< بلاک مهاجرت جدید برای سشن‌های معاملاتی (ورژن 15) - با مقادیر اصلاح شده
+        if current_db_version < 15:
+            print("Migrating to version 15: Adding default trading session times in UTC (adjusted for EDT display).")
+            # مقادیر پیش‌فرض سشن‌ها بر اساس تبدیل از ET (با فرض EDT) به UTC
+            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('ny_session_start_utc', '13:30'))
+            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('ny_session_end_utc', '20:00'))
+            
+            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('sydney_session_start_utc', '00:00'))
+            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('sydney_session_end_utc', '06:00'))
+            
+            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('tokyo_session_start_utc', '00:00'))
+            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('tokyo_session_end_utc', '06:00'))
+            
+            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('london_session_start_utc', '07:00'))
+            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('london_session_end_utc', '15:30'))
+            
+            _set_db_version(conn, cursor, 15)
+            current_db_version = 15
         # >>>
 
         conn.commit()
@@ -389,9 +405,6 @@ def get_loss_trades_count():
         cursor.execute("SELECT COUNT(*) FROM trades WHERE profit = 'Loss'")
         count = cursor.fetchone()[0] or 0
         return count
-    except sqlite3.Error as e:
-        print(f"خطا در دریافت تعداد تریدهای زیان‌ده: {e}")
-        return 0
     finally:
         conn.close()
 
@@ -635,6 +648,38 @@ def set_working_days(days_list):
     """
     working_days_str = ','.join(map(str, sorted(list(set(days_list))))) # حذف تکراری و مرتب‌سازی
     return set_setting('working_days', working_days_str)
+
+# توابع جدید برای مدیریت ساعت‌های سشن‌های معاملاتی
+def get_session_times_utc():
+    """
+    ساعت‌های شروع و پایان سشن‌های معاملاتی را به فرمت HH:MM (UTC) از تنظیمات برمی‌گرداند.
+    """
+    sessions = {
+        'ny': {'start': get_setting('ny_session_start_utc', '13:30'), 'end': get_setting('ny_session_end_utc', '20:00')}, # Updated defaults
+        'sydney': {'start': get_setting('sydney_session_start_utc', '00:00'), 'end': get_setting('sydney_session_end_utc', '06:00')}, # Updated defaults
+        'tokyo': {'start': get_setting('tokyo_session_start_utc', '00:00'), 'end': get_setting('tokyo_session_end_utc', '06:00')}, # Updated defaults
+        'london': {'start': get_setting('london_session_start_utc', '07:00'), 'end': get_setting('london_session_end_utc', '15:30')} # Updated defaults
+    }
+    return sessions
+
+def set_session_times_utc(session_data):
+    """
+    ساعت‌های شروع و پایان سشن‌های معاملاتی را (به فرمت HH:MM UTC) در تنظیمات ذخیره می‌کند.
+    Args:
+        session_data (dict): دیکشنری شامل ساعت‌های سشن‌ها.
+                             مثال: {'ny': {'start': 'HH:MM', 'end': 'HH:MM'}, ...}
+    Returns:
+        bool: True اگر عملیات موفقیت‌آمیز باشد، False در غیر این صورت.
+    """
+    try:
+        for session_key, times in session_data.items():
+            if not set_setting(f'{session_key}_session_start_utc', times['start']) or \
+               not set_setting(f'{session_key}_session_end_utc', times['end']):
+                return False
+        return True
+    except Exception as e:
+        print(f"Error setting session times: {e}")
+        return False
 
 if __name__ == '__main__':
     migrate_database()

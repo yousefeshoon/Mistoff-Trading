@@ -15,7 +15,7 @@ import mt5_importer
 from view_trades import show_trades_window
 from error_widget import show_error_frequency_widget
 from tkinter import simpledialog
-import settings_manager # <<< مطمئن می‌شیم که این ایمپورت هست و استفاده می‌شه
+import settings_manager 
 import report_selection_window 
 
 db_manager.migrate_database()
@@ -442,7 +442,7 @@ import_report_btn = tk.Button(report_import_frame, text="وارد کردن از 
 import_report_btn.grid(row=1, column=0, columnspan=3, pady=5)
 
 
-# فریم افقی برای دکمه‌های اصلی (نمایش تریدها و فراوانی خطاها)
+# فریم افقی برای دکمه‌های اصلی
 button_frame = tk.Frame(root)
 button_frame.pack(pady=10)
 
@@ -481,13 +481,14 @@ root.config(menu=menubar)
 
 settings_menu = tk.Menu(menubar, tearoff=0)
 menubar.add_cascade(label="تنظیمات", menu=settings_menu)
-# فراخوانی توابع از settings_manager
+# فراخوانی توابع از settings_manager (با آرگومان‌های صحیح)
 settings_menu.add_command(label="تنظیم منطقه زمانی...", command=lambda: settings_manager.show_timezone_settings_window(root, update_main_timezone_display_callback))
 settings_menu.add_command(label="تعیین آستانه ریسک فری...", command=lambda: settings_manager.show_rf_threshold_settings_window(root, update_trade_count, None, None, None))
 settings_menu.add_command(label="تنظیم آستانه نمایش فراوانی خطاها...", command=lambda: settings_manager.show_error_frequency_settings_window(root))
-# <<< اضافه شدن گزینه جدید به منوی تنظیمات
+# اضافه شدن گزینه جدید به منوی تنظیمات
 settings_menu.add_command(label="تنظیم روزهای کاری...", command=lambda: settings_manager.show_working_days_settings_window(root))
-# >>>
+# اضافه شدن گزینه جدید به منوی تنظیمات برای سشن‌های معاملاتی
+settings_menu.add_command(label="تنظیم سشن‌های معاملاتی...", command=lambda: settings_manager.show_trading_sessions_settings_window(root))
 
 update_main_timezone_display_callback() 
 
