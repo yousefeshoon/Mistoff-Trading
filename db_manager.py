@@ -18,7 +18,7 @@ DATABASE_NAME = "trades.db"
 # تمام بلاک های مهاجرتی قبلی را در یک شمای نهایی جمع بندی کرده ایم.
 # برای هر تغییر ساختاری جدید در آینده، باید این ورژن را افزایش داده
 # و یک بلاک مهاجرت جدید (با ALTER TABLE) اضافه کنیم.
-DATABASE_SCHEMA_VERSION = 13
+DATABASE_SCHEMA_VERSION = 14 # <<< افزایش ورژن به 14
 
 def _get_db_version(cursor):
     """
@@ -105,6 +105,17 @@ def migrate_database():
             cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('error_frequency_threshold', '10.0'))
             _set_db_version(conn, cursor, 13)
             current_db_version = 13
+        
+        # <<< بلاک مهاجرت جدید برای working_days
+        if current_db_version < 14:
+            print("Migrating to version 14: Adding 'working_days' setting.")
+            # روزهای کاری پیش فرض: دوشنبه تا جمعه (1,2,3,4,5)
+            # دوشنبه = 0, یکشنبه = 6 (معمولی در پایتون و اکثر سیستم‌ها)
+            # پس برای دوشنبه تا جمعه: 0,1,2,3,4
+            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('working_days', '0,1,2,3,4'))
+            _set_db_version(conn, cursor, 14)
+            current_db_version = 14
+        # >>>
 
         conn.commit()
         print("Database migration complete. DB is up to date.")
@@ -504,9 +515,6 @@ def get_setting(key, default_value=None):
         cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
         result = cursor.fetchone()
         return result['value'] if result else default_value
-    except sqlite3.Error as e:
-        print(f"خطا در دریافت تنظیمات '{key}': {e}")
-        return default_value
     finally:
         conn.close()
 
@@ -603,6 +611,30 @@ def recalculate_trade_profits():
         return 0
     finally:
         conn.close()
+
+# توابع جدید برای مدیریت روزهای کاری
+def get_working_days():
+    """
+    روزهای کاری را به صورت لیستی از اعداد (0=دوشنبه تا 6=یکشنبه) از تنظیمات برمی‌گرداند.
+    پیش‌فرض: 0,1,2,3,4 (دوشنبه تا جمعه)
+    """
+    working_days_str = get_setting('working_days', '0,1,2,3,4')
+    try:
+        return [int(day.strip()) for day in working_days_str.split(',') if day.strip()]
+    except ValueError:
+        print(f"Warning: Invalid working_days setting '{working_days_str}'. Using default 0,1,2,3,4.")
+        return [0, 1, 2, 3, 4]
+
+def set_working_days(days_list):
+    """
+    روزهای کاری را در دیتابیس ذخیره می‌کند (به صورت رشته‌ای از اعداد جدا شده با کاما).
+    Args:
+        days_list (list): لیستی از اعداد روزهای هفته (0=دوشنبه تا 6=یکشنبه) که روز کاری هستند.
+    Returns:
+        bool: True اگر عملیات موفقیت‌آمیز باشد، False در غیر این صورت.
+    """
+    working_days_str = ','.join(map(str, sorted(list(set(days_list))))) # حذف تکراری و مرتب‌سازی
+    return set_setting('working_days', working_days_str)
 
 if __name__ == '__main__':
     migrate_database()

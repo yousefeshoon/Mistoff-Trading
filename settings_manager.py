@@ -116,10 +116,11 @@ def show_rf_threshold_settings_window(parent_root, update_trade_count_callback, 
                 # Update main app UI via callbacks
                 if update_trade_count_callback:
                     update_trade_count_callback()
-                if profit_label and loss_label and count_trades_by_type_callback:
-                    profit_count, loss_count = count_trades_by_type_callback()
-                    profit_label.config(text=f"تعداد تریدهای سودده: {profit_count}")
-                    loss_label.config(text=f"تعداد تریدهای زیان‌ده: {loss_count}")
+                # این خطوط مربوط به profit_label و loss_label حذف شدند (طبق توافق قبلی)
+                # if profit_label and loss_label and count_trades_by_type_callback:
+                #     profit_count, loss_count = count_trades_by_type_callback()
+                #     profit_label.config(text=f"تعداد تریدهای سودده: {profit_count}")
+                #     loss_label.config(text=f"تعداد تریدهای زیان‌ده: {loss_count}")
 
                 rf_win.destroy()
             else:
@@ -194,3 +195,66 @@ def update_timezone_display_for_main_app(label_widget):
     """Updates the timezone display label in the main app."""
     current_tz_name = db_manager.get_default_timezone()
     label_widget.config(text=f"⏰ منطقه زمانی فعال: {current_tz_name}")
+
+# <<< تابع جدید برای تنظیمات روزهای کاری (show_working_days_settings_window)
+def show_working_days_settings_window(parent_root):
+    wd_win = tk.Toplevel(parent_root)
+    wd_win.title("تنظیم روزهای کاری")
+    wd_win.transient(parent_root)
+    wd_win.grab_set()
+    wd_win.resizable(False, False)
+
+    parent_root.update_idletasks()
+    root_width = parent_root.winfo_width()
+    root_height = parent_root.winfo_height()
+    root_x = parent_root.winfo_x()
+    root_y = parent_root.winfo_y()
+
+    wd_win_width = 350
+    wd_win_height = 300 # ارتفاع بیشتر برای چک‌باکس‌ها
+    x = root_x + (root_width / 2) - (wd_win_width / 2)
+    y = root_y + (root_height / 2) - (wd_win_height / 2)
+    wd_win.geometry(f'{wd_win_width}x{wd_win_height}+{int(x)}+{int(y)}')
+
+    frame = tk.Frame(wd_win, padx=15, pady=15)
+    frame.pack(fill=tk.BOTH, expand=True)
+
+    tk.Label(frame, text="روزهای کاری هفته را انتخاب کنید :", anchor='w').pack(pady=(0, 10), fill='x')
+
+    # Tkinter uses Monday=0, Tuesday=1, ..., Sunday=6 for datetime.weekday()
+    # We display them based on Persian calendar (Shanbeh as end of week, Doshanbeh as start)
+    # Mapping: Python's 0 (Monday) -> دوشنبه
+    day_names_persian = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنج‌شنبه", "جمعه", "شنبه", "یکشنبه"]
+    python_weekday_order = [0, 1, 2, 3, 4, 5, 6] # Monday=0, Tuesday=1, ..., Sunday=6
+
+    day_vars = {}
+    current_working_days = db_manager.get_working_days()
+
+    for i, day_name in enumerate(day_names_persian):
+        python_day_index = python_weekday_order[i] # Get the corresponding Python weekday index
+        
+        var = tk.BooleanVar()
+        if python_day_index in current_working_days:
+            var.set(True)
+        
+        chk = tk.Checkbutton(frame, text=day_name, variable=var, anchor='w')
+        chk.pack(anchor='w', padx=5, pady=2)
+        day_vars[python_day_index] = var # Store with Python's weekday index
+
+    def save_working_days():
+        selected_days = [day_index for day_index, var in day_vars.items() if var.get()]
+        
+        if db_manager.set_working_days(selected_days):
+            messagebox.showinfo("موفقیت", "روزهای کاری با موفقیت ذخیره شدند.")
+            wd_win.destroy()
+        else:
+            messagebox.showerror("خطا", "خطایی در ذخیره روزهای کاری رخ داد.")
+
+    btn_frame_wd_settings = tk.Frame(frame)
+    btn_frame_wd_settings.pack(pady=10)
+
+    tk.Button(btn_frame_wd_settings, text="ذخیره", command=save_working_days).pack(side=tk.LEFT, padx=5)
+    tk.Button(btn_frame_wd_settings, text="لغو", command=wd_win.destroy).pack(side=tk.LEFT, padx=5)
+
+    wd_win.focus_set()
+    wd_win.wait_window(wd_win)

@@ -15,7 +15,7 @@ import mt5_importer
 from view_trades import show_trades_window
 from error_widget import show_error_frequency_widget
 from tkinter import simpledialog
-import settings_manager
+import settings_manager # <<< مطمئن می‌شیم که این ایمپورت هست و استفاده می‌شه
 import report_selection_window 
 
 db_manager.migrate_database()
@@ -26,7 +26,6 @@ root = tk.Tk()
 root.iconbitmap(os.path.join(os.path.dirname(__file__), "icon.ico"))
 root.title(f"MistOff Trading - {APP_VERSION}")
 
-# <<< تغییرات اینجا (موقعیت و اندازه فرم اصلی)
 # محاسبه ابعاد صفحه نمایش
 screen_width = root.winfo_screenwidth()
 screen_height = root.winfo_screenheight()
@@ -37,10 +36,9 @@ main_form_height = 750
 
 # محاسبه موقعیت: 5% از بالا و سمت چپ (با یک فاصله مشخص)
 x_position = 50 # فاصله ثابت از لبه چپ
-y_position = int(screen_height * 0.03) # 5% از ارتفاع کل مانیتور
+y_position = int(screen_height * 0.05) # 5% از ارتفاع کل مانیتور
 
 root.geometry(f'{main_form_width}x{main_form_height}+{int(x_position)}+{int(y_position)}')
-# >>>
 
 main_frame = tk.Frame(root)
 main_frame.pack(padx=10, pady=10)
@@ -135,11 +133,6 @@ def save_trade(event=None):
     messagebox.showinfo("Saved", "Trade saved successfully.")
     update_trade_count()
     
-    # profit_count, loss_count = count_trades_by_type() # حذف این خطوط
-    # profit_label.config(text=f"تعداد تریدهای سودده: {profit_count}") # حذف این خطوط
-    # loss_label.config(text=f"تعداد تریدهای زیان‌ده: {loss_count}") # حذف این خطوط
-
-
 def clear_fields():
     entry_date.set_date('')
     entry_time.delete(0, tk.END)
@@ -189,9 +182,6 @@ def refresh_error_checkboxes():
 def update_trade_count():
     count = db_manager.get_total_trades_count()
     trade_count_label.config(text=f"📈 تعداد تریدها: {count}")
-
-# تابع count_trades_by_type و لیبل‌های سود/زیان قبلاً حذف شده‌اند (طبق توافق قبلی)
-
 
 def add_labeled_entry(row, label_text, widget):
     label = tk.Label(main_frame, text=label_text, anchor='e', width=15)
@@ -456,7 +446,6 @@ import_report_btn.grid(row=1, column=0, columnspan=3, pady=5)
 button_frame = tk.Frame(root)
 button_frame.pack(pady=10)
 
-# <<< تغییرات اینجا (ترتیب دکمه‌ها و حذف لیبل‌های سود/زیان)
 # دکمه نمایش تریدها
 tk.Button(button_frame, text="📄 نمایش تریدها",
           command=lambda: show_trades_window(root,
@@ -474,8 +463,7 @@ tk.Button(button_frame, text="📊 گزارش جامع",
           command=lambda: report_selection_window.show_report_selection_window(root),
           bg="#A9DFBF", # رنگ پس زمینه متفاوت
           activebackground="#82CBB2" # رنگ هنگام کلیک
-          ).pack(side=tk.RIGHT, padx=5)
-# >>>
+          ).pack(side=tk.RIGHT, padx=5) 
 
 # تعداد تریدها
 trade_count_label = tk.Label(root, text="📈 تعداد کل تریدها: 0")
@@ -493,11 +481,14 @@ root.config(menu=menubar)
 
 settings_menu = tk.Menu(menubar, tearoff=0)
 menubar.add_cascade(label="تنظیمات", menu=settings_menu)
-# فراخوانی توابع از settings_manager (با آرگومان‌های صحیح)
+# فراخوانی توابع از settings_manager
 settings_menu.add_command(label="تنظیم منطقه زمانی...", command=lambda: settings_manager.show_timezone_settings_window(root, update_main_timezone_display_callback))
 settings_menu.add_command(label="تعیین آستانه ریسک فری...", command=lambda: settings_manager.show_rf_threshold_settings_window(root, update_trade_count, None, None, None))
 settings_menu.add_command(label="تنظیم آستانه نمایش فراوانی خطاها...", command=lambda: settings_manager.show_error_frequency_settings_window(root))
+# <<< اضافه شدن گزینه جدید به منوی تنظیمات
+settings_menu.add_command(label="تنظیم روزهای کاری...", command=lambda: settings_manager.show_working_days_settings_window(root))
+# >>>
 
-update_main_timezone_display_callback() # فراخوانی اولیه برای نمایش منطقه زمانی
+update_main_timezone_display_callback() 
 
 root.mainloop()
