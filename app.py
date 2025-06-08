@@ -16,6 +16,7 @@ from view_trades import show_trades_window
 from error_widget import show_error_frequency_widget
 from tkinter import simpledialog
 import settings_manager
+import report_selection_window 
 
 db_manager.migrate_database()
 
@@ -118,17 +119,9 @@ def save_trade(event=None):
     messagebox.showinfo("Saved", "Trade saved successfully.")
     update_trade_count()
     
-    profit_count, loss_count = count_trades_by_type()
-    profit_label.config(text=f"تعداد تریدهای سودده: {profit_count}")
-    loss_label.config(text=f"تعداد تریدهای زیان‌ده: {loss_count}")
-
-    entry_time.delete(0, tk.END)
-    entry_entry.delete(0, tk.END)
-    entry_exit.delete(0, tk.END)
-    profit_var.set("Profit")
-    trade_type_var.set("buy")
-    for var in error_vars.values():
-        var.set(False)
+    # profit_count, loss_count = count_trades_by_type() # حذف این خط
+    # profit_label.config(text=f"تعداد تریدهای سودده: {profit_count}") # حذف این خط
+    # loss_label.config(text=f"تعداد تریدهای زیان‌ده: {loss_count}") # حذف این خط
 
 
 def clear_fields():
@@ -181,10 +174,10 @@ def update_trade_count():
     count = db_manager.get_total_trades_count()
     trade_count_label.config(text=f"📈 تعداد تریدها: {count}")
 
-def count_trades_by_type():
-    profit_count = db_manager.get_profit_trades_count()
-    loss_count = db_manager.get_loss_trades_count()
-    return profit_count, loss_count
+# def count_trades_by_type(): # حذف این تابع
+#     profit_count = db_manager.get_profit_trades_count()
+#     loss_count = db_manager.get_loss_trades_count()
+#     return profit_count, loss_count
 
 def add_labeled_entry(row, label_text, widget):
     label = tk.Label(main_frame, text=label_text, anchor='e', width=15)
@@ -340,9 +333,9 @@ def import_trades_from_report():
             
             messagebox.showinfo("وارد کردن موفق", f"{actually_imported_count} ترید جدید با موفقیت وارد دیتابیس شد.")
             update_trade_count()
-            profit_count, loss_count = count_trades_by_type()
-            profit_label.config(text=f"تعداد تریدهای سودده: {profit_count}")
-            loss_label.config(text=f"تعداد تریدهای زیان‌ده: {loss_count}")
+            # profit_count, loss_count = count_trades_by_type() # حذف این خط
+            # profit_label.config(text=f"تعداد تریدهای سودده: {profit_count}") # حذف این خط
+            # loss_label.config(text=f"تعداد تریدهای زیان‌ده: {loss_count}") # حذف این خط
         else:
             messagebox.showinfo("لغو", "وارد کردن اطلاعات لغو شد.")
 
@@ -403,8 +396,8 @@ error_scroll_frame = tk.Frame(main_frame)
 error_scroll_frame.grid(row=8, column=1, columnspan=2, sticky='w', pady=(10, 0))
 
 # Canvas برای اسکرول‌بار
-error_canvas = tk.Canvas(error_scroll_frame, borderwidth=0, background="#ffffff", highlightthickness=0, width=220)
-error_canvas.pack(side="left", fill="both", expand=False)
+error_canvas = tk.Canvas(error_scroll_frame, borderwidth=0, background="#ffffff", highlightthickness=0, width=220) 
+error_canvas.pack(side="left", fill="y", expand=False)
 
 # Scrollbar عمودی
 error_scrollbar = ttk.Scrollbar(error_scroll_frame, orient="vertical", command=error_canvas.yview)
@@ -438,7 +431,7 @@ report_file_path_var = tk.StringVar()
 
 tk.Label(report_import_frame, text="فایل گزارش اکسل:", anchor='w').grid(row=0, column=0, padx=5, pady=5, sticky='w')
 
-report_path_entry = tk.Entry(report_import_frame, textvariable=report_file_path_var, width=40, state='readonly')
+report_path_entry = tk.Entry(report_import_frame, textvariable=report_file_path_var, width=35, state='readonly')
 report_path_entry.grid(row=0, column=1, padx=5, pady=5, sticky='ew')
 
 select_file_btn = tk.Button(report_import_frame, text="انتخاب فایل...", command=select_report_file)
@@ -452,29 +445,29 @@ import_report_btn.grid(row=1, column=0, columnspan=3, pady=5)
 button_frame = tk.Frame(root)
 button_frame.pack(pady=10)
 
-# دکمه نمایش تریدها (با ارسال کال‌بک‌ها)
+# دکمه‌های سمت چپ (همان ترتیب قبلی)
+tk.Button(button_frame, text="📊 فراوانی خطاها", command=lambda: show_error_frequency_widget(root)).pack(side=tk.LEFT, padx=5)
+tk.Button(button_frame, text="✏️ ویرایش خطاها", command=edit_errors_window).pack(side=tk.LEFT, padx=5)
 tk.Button(button_frame, text="📄 نمایش تریدها",
           command=lambda: show_trades_window(root,
                                             refresh_main_errors_callback=refresh_error_checkboxes,
                                             update_main_timezone_display=update_main_timezone_display_callback)).pack(side=tk.LEFT, padx=5)
 
-# دکمه نمایش درصد فراوانی خطاها
-tk.Button(button_frame, text="📊 فراوانی خطاها", command=lambda: show_error_frequency_widget(root)).pack(side=tk.LEFT, padx=5)
+# دکمه "گزارش جامع" که به سمت راست می‌چسبد
+tk.Button(button_frame, text="📊 گزارش جامع",
+          command=lambda: report_selection_window.show_report_selection_window(root),
+          bg="#A9DFBF", # رنگ پس زمینه متفاوت
+          activebackground="#82CBB2" # رنگ هنگام کلیک
+          ).pack(side=tk.RIGHT, padx=5) 
 
-# دکمه ویرایش خطاها
-tk.Button(button_frame, text="✏️ ویرایش خطاها", command=edit_errors_window).pack(side=tk.LEFT, padx=5)
-
-# نمایش تعداد تریدهای سودده و زیان‌ده
-profit_count, loss_count = count_trades_by_type()
-
-frame_counts = tk.Frame(root)
-frame_counts.pack(pady=(5, 10))
-
-profit_label = tk.Label(frame_counts, text=f"تعداد تریدهای سودده: {profit_count}", fg="green")
-profit_label.pack(side="left", padx=10)
-
-loss_label = tk.Label(frame_counts, text=f"تعداد تریدهای زیان‌ده: {loss_count}", fg="red")
-loss_label.pack(side="left", padx=10)
+# نمایش تعداد تریدهای سودده و زیان‌ده (این بخش حذف شده است)
+# profit_count, loss_count = count_trades_by_type() # حذف
+# frame_counts = tk.Frame(root) # حذف
+# frame_counts.pack(pady=(5, 10)) # حذف
+# profit_label = tk.Label(frame_counts, text=f"تعداد تریدهای سودده: {profit_count}", fg="green") # حذف
+# profit_label.pack(side="left", padx=10) # حذف
+# loss_label = tk.Label(frame_counts, text=f"تعداد تریدهای زیان‌ده: {loss_count}", fg="red") # حذف
+# loss_label.pack(side="left", padx=10) # حذف
 
 # Ctrl+S
 root.bind('<Control-s>', save_trade)
@@ -496,7 +489,8 @@ root.config(menu=menubar)
 settings_menu = tk.Menu(menubar, tearoff=0)
 menubar.add_cascade(label="تنظیمات", menu=settings_menu)
 settings_menu.add_command(label="تنظیم منطقه زمانی...", command=lambda: settings_manager.show_timezone_settings_window(root, update_main_timezone_display_callback))
-settings_menu.add_command(label="تعیین آستانه ریسک فری...", command=lambda: settings_manager.show_rf_threshold_settings_window(root, update_trade_count, profit_label, loss_label, count_trades_by_type))
+# آرگومان‌های اضافه شده به show_rf_threshold_settings_window حذف شدند
+settings_menu.add_command(label="تعیین آستانه ریسک فری...", command=lambda: settings_manager.show_rf_threshold_settings_window(root, update_trade_count, None, None, None))
 settings_menu.add_command(label="تنظیم آستانه نمایش فراوانی خطاها...", command=lambda: settings_manager.show_error_frequency_settings_window(root))
 
 update_main_timezone_display_callback()
