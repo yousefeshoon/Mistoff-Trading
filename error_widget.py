@@ -6,6 +6,7 @@ import db_manager
 from collections import Counter
 import sys
 import version_info
+import report_selection_window 
 
 # تابع اصلی که حالا یک پنجره والد (parent) می‌گیرد
 def show_error_frequency_widget(parent_window=None):
@@ -51,13 +52,6 @@ def show_error_frequency_widget(parent_window=None):
         elif selected_mode == "فراوانی کلی":
             raw_errors = db_manager.get_all_trades_errors()
             total_relevant_trades = db_manager.get_total_trades_count()
-            # نکته: اگر total_relevant_trades صفر باشد اما raw_errors حاوی دیتا باشد،
-            # این حالت به معنی وجود خطا در تریدهای "غیر زیان/سود" است.
-            # در این صورت، برای جلوگیری از تقسیم بر صفر و نمایش صحیح،
-            # می‌توانیم total_relevant_trades را حداقل 1 در نظر بگیریم
-            # اگر هدف نمایش هر خطای موجود باشد.
-            # اما منطقی‌تر این است که اگر تعداد تریدها صفر است، پیامی مبنی بر عدم وجود ترید بدهیم.
-            # فعلاً رفتار موجود را حفظ می‌کنیم.
 
         # شمارش خطاها
         error_counts = {}
@@ -70,7 +64,7 @@ def show_error_frequency_widget(parent_window=None):
 
         # نمایش یا عدم نمایش Treeview بر اساس وجود خطا
         # و یا وجود ترید مرتبط برای محاسبه درصد
-        if total_relevant_trades == 0 or not error_counts: # اگر هیچ ترید مرتبط یا خطایی وجود نداشته باشد
+        if total_relevant_trades == 0 or not error_counts:
             if tree_frame and tree_frame.winfo_exists():
                 tree_frame.destroy()
                 tree = None
@@ -98,14 +92,9 @@ def show_error_frequency_widget(parent_window=None):
             # پر کردن Treeview با داده‌های جدید، با اعمال فیلتر درصد فراوانی (فقط در صورت نیاز)
             sorted_errors = sorted(error_counts.items(), key=lambda item: item[1], reverse=True)
             for error, freq in sorted_errors:
-                # اگر total_relevant_trades صفر باشد، درصد را به عنوان N/A نمایش می‌دهیم
-                # یا می‌توانیم این مورد را در شرط بالا handle کنیم تا به اینجا نرسد.
-                # فرض می‌کنیم total_relevant_trades > 0 در این بلوک.
                 percent = (freq / total_relevant_trades) * 100 
                 
-                # اعمال فیلتر درصد فقط برای حالت‌های خاص
-                # در حالت 'فراوانی کلی'، آستانه اعمال نمی‌شود
-                if selected_mode == "فراوانی کلی" or percent >= float(frequency_threshold): #
+                if selected_mode == "فراوانی کلی" or percent >= float(frequency_threshold): 
                     tree.insert('', tk.END, values=(error, f"{percent:.1f} %"))
 
         # تنظیم خودکار Refresh (مثلاً هر 5 دقیقه یک بار) - فقط برای اجرای مستقل
@@ -125,8 +114,6 @@ def show_error_frequency_widget(parent_window=None):
     root.title(f" فراوانی خطاها - {version_info.__version__}")
     root.geometry("320x300")
     
-    # متغیر برای نگهداری حالت نمایش انتخاب شده
-    # این متغیر باید بعد از تعریف root یا Toplevel ایجاد شود
     display_mode_var = tk.StringVar(root)
     display_mode_var.set("فراوانی اشتباهات در زیان‌ها") # حالت پیش‌فرض
 
@@ -136,9 +123,21 @@ def show_error_frequency_widget(parent_window=None):
     mode_combobox.pack(pady=10)
     mode_combobox.bind("<<ComboboxSelected>>", load_and_display_errors)
 
+    # فریم برای دکمه‌ها
+    button_frame = tk.Frame(root)
+    button_frame.pack(pady=5)
+
     # دکمه Refresh
-    refresh_button = tk.Button(root, text="🔄 Refresh", command=load_and_display_errors)
-    refresh_button.pack(pady=5)
+    refresh_button = tk.Button(button_frame, text="🔄 Refresh", command=load_and_display_errors)
+    refresh_button.pack(side=tk.LEFT, padx=5)
+
+    # <<< اضافه شده: دکمه گزارش جامع
+    tk.Button(button_frame, text="📊 گزارش جامع",
+              command=lambda: report_selection_window.show_report_selection_window(root), # root را به عنوان parent_window ارسال می‌کنیم
+              bg="#A9DFBF", # رنگ پس زمینه متفاوت
+              activebackground="#82CBB2" # رنگ هنگام کلیک
+              ).pack(side=tk.LEFT, padx=5)
+    # >>>
 
     # بارگذاری اولیه داده‌ها
     load_and_display_errors()

@@ -20,7 +20,7 @@ def create_report_card(parent_frame, image_path, title, description, button_text
     یک "کارت" گزارش با تصویر، عنوان، توضیحات و دکمه ایجاد می‌کند.
     """
     card_width = 280 # عرض ثابت برای هر کارت
-    card_height = 300 # ارتفاع ثابت برای هر کارت (حدودی)
+    card_height = 320 # ارتفاع ثابت برای هر کارت (حدودی)
     card_frame = tk.Frame(parent_frame, bg="white", padx=20, pady=20, 
                           highlightbackground="white", highlightthickness=2,
                           width=card_width, height=card_height, bd=0, relief="flat") 
@@ -61,7 +61,7 @@ def create_report_card(parent_frame, image_path, title, description, button_text
     # دکمه (این بار از tk.Button استفاده می‌کنیم برای کنترل بهتر رنگ)
     action_button = tk.Button(card_frame, text=button_text, command=command,
                               bg="#4285F4", fg="white", 
-                              font=("Segoe UI", 10, "bold"),
+                              font=("Tahoma", 10, "bold"),
                               borderwidth=0, relief="flat", 
                               padx=10, pady=5, 
                               activebackground="#3367D6", 
@@ -93,7 +93,7 @@ def create_report_card(parent_frame, image_path, title, description, button_text
 
 def show_report_selection_window(parent_root):
     reports_win = tk.Toplevel(parent_root)
-    reports_win.title("انتخاب گزارش‌ها")
+    reports_win.title("گزارش جامع")
     reports_win.transient(parent_root)
     reports_win.grab_set()
     reports_win.resizable(False, False)
@@ -140,20 +140,20 @@ def show_report_selection_window(parent_root):
         cards_frame, 
         image_path=get_resource_path("assets/card1.png"), 
         title="بررسی روزهای هفته",
-        description="اینجا میتونید آنالیز تکرار اشتباهات مختلف رو در روزهای هفته بررسی و گزارش بگیرید",
-        button_text="بزن بریم",
+        description="آنالیز تکرار اشتباهات مختلف رو در روزهای هفته بررسی و گزارش بگیرید",
+        button_text="برو بریم",
         command=open_comprehensive_report
     )
     card1.grid(row=0, column=2, padx=15, pady=10) 
 
     card2 = create_report_card(
         cards_frame,
-        image_path="", # اینجا مسیر واقعی عکس را بگذارید
-        title="تحلیل خطاها",
-        description="بررسی جامع خطاهای تریدینگ، شامل فراوانی، روندها و الگوهای اشتباهات شما.",
-        button_text="بزن بریم",
+        image_path=get_resource_path("assets/card2.png"),
+        title="بررسی ساعات پر اشتباه",
+        description="ساعات مختلف روز رو بر اساس تکرار اشتباهات مختلف بررسی کنید و بهتر تصمیم بگیرید",
+        button_text="برو بریم",
         command=open_error_analysis_report,
-        is_coming_soon=True 
+        #is_coming_soon=True 
     )
     card2.grid(row=0, column=1, padx=15, pady=10) 
 
@@ -162,7 +162,7 @@ def show_report_selection_window(parent_root):
         image_path="", # اینجا مسیر واقعی عکس را بگذارید
         title="آمار عملکرد",
         description="گزارش‌های آماری از سوددهی، وین ریت، میزان ریسک و سایر شاخص‌های عملکرد.",
-        button_text="بزن بریم",
+        button_text="برو بریم",
         command=open_performance_stats_report,
         is_coming_soon=True 
     )
