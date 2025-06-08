@@ -25,7 +25,22 @@ APP_VERSION = version_info.__version__
 root = tk.Tk()
 root.iconbitmap(os.path.join(os.path.dirname(__file__), "icon.ico"))
 root.title(f"MistOff Trading - {APP_VERSION}")
-root.geometry("450x750")
+
+# <<< تغییرات اینجا (موقعیت و اندازه فرم اصلی)
+# محاسبه ابعاد صفحه نمایش
+screen_width = root.winfo_screenwidth()
+screen_height = root.winfo_screenheight()
+
+# ابعاد فرم اصلی
+main_form_width = 450
+main_form_height = 750
+
+# محاسبه موقعیت: 5% از بالا و سمت چپ (با یک فاصله مشخص)
+x_position = 50 # فاصله ثابت از لبه چپ
+y_position = int(screen_height * 0.03) # 5% از ارتفاع کل مانیتور
+
+root.geometry(f'{main_form_width}x{main_form_height}+{int(x_position)}+{int(y_position)}')
+# >>>
 
 main_frame = tk.Frame(root)
 main_frame.pack(padx=10, pady=10)
@@ -33,6 +48,7 @@ main_frame.pack(padx=10, pady=10)
 current_timezone_label = tk.Label(root, text="", fg="blue", font=("Segoe UI", 10, "bold"))
 current_timezone_label.pack(pady=(0, 5))
 
+# تابع کال‌بک برای به‌روزرسانی نمایش منطقه زمانی (از settings_manager فراخوانی می‌شود)
 def update_main_timezone_display_callback():
     settings_manager.update_timezone_display_for_main_app(current_timezone_label)
 
@@ -119,9 +135,9 @@ def save_trade(event=None):
     messagebox.showinfo("Saved", "Trade saved successfully.")
     update_trade_count()
     
-    # profit_count, loss_count = count_trades_by_type() # حذف این خط
-    # profit_label.config(text=f"تعداد تریدهای سودده: {profit_count}") # حذف این خط
-    # loss_label.config(text=f"تعداد تریدهای زیان‌ده: {loss_count}") # حذف این خط
+    # profit_count, loss_count = count_trades_by_type() # حذف این خطوط
+    # profit_label.config(text=f"تعداد تریدهای سودده: {profit_count}") # حذف این خطوط
+    # loss_label.config(text=f"تعداد تریدهای زیان‌ده: {loss_count}") # حذف این خطوط
 
 
 def clear_fields():
@@ -174,10 +190,8 @@ def update_trade_count():
     count = db_manager.get_total_trades_count()
     trade_count_label.config(text=f"📈 تعداد تریدها: {count}")
 
-# def count_trades_by_type(): # حذف این تابع
-#     profit_count = db_manager.get_profit_trades_count()
-#     loss_count = db_manager.get_loss_trades_count()
-#     return profit_count, loss_count
+# تابع count_trades_by_type و لیبل‌های سود/زیان قبلاً حذف شده‌اند (طبق توافق قبلی)
+
 
 def add_labeled_entry(row, label_text, widget):
     label = tk.Label(main_frame, text=label_text, anchor='e', width=15)
@@ -333,9 +347,6 @@ def import_trades_from_report():
             
             messagebox.showinfo("وارد کردن موفق", f"{actually_imported_count} ترید جدید با موفقیت وارد دیتابیس شد.")
             update_trade_count()
-            # profit_count, loss_count = count_trades_by_type() # حذف این خط
-            # profit_label.config(text=f"تعداد تریدهای سودده: {profit_count}") # حذف این خط
-            # loss_label.config(text=f"تعداد تریدهای زیان‌ده: {loss_count}") # حذف این خط
         else:
             messagebox.showinfo("لغو", "وارد کردن اطلاعات لغو شد.")
 
@@ -445,32 +456,26 @@ import_report_btn.grid(row=1, column=0, columnspan=3, pady=5)
 button_frame = tk.Frame(root)
 button_frame.pack(pady=10)
 
-# دکمه‌های سمت چپ (همان ترتیب قبلی)
-tk.Button(button_frame, text="📊 فراوانی خطاها", command=lambda: show_error_frequency_widget(root)).pack(side=tk.LEFT, padx=5)
-tk.Button(button_frame, text="✏️ ویرایش خطاها", command=edit_errors_window).pack(side=tk.LEFT, padx=5)
+# <<< تغییرات اینجا (ترتیب دکمه‌ها و حذف لیبل‌های سود/زیان)
+# دکمه نمایش تریدها
 tk.Button(button_frame, text="📄 نمایش تریدها",
           command=lambda: show_trades_window(root,
                                             refresh_main_errors_callback=refresh_error_checkboxes,
                                             update_main_timezone_display=update_main_timezone_display_callback)).pack(side=tk.LEFT, padx=5)
+
+# دکمه ویرایش خطاها
+tk.Button(button_frame, text="✏️ ویرایش خطاها", command=edit_errors_window).pack(side=tk.LEFT, padx=5)
+
+# دکمه نمایش درصد فراوانی خطاها
+tk.Button(button_frame, text="📊 فراوانی خطاها", command=lambda: show_error_frequency_widget(root)).pack(side=tk.LEFT, padx=5)
 
 # دکمه "گزارش جامع" که به سمت راست می‌چسبد
 tk.Button(button_frame, text="📊 گزارش جامع",
           command=lambda: report_selection_window.show_report_selection_window(root),
           bg="#A9DFBF", # رنگ پس زمینه متفاوت
           activebackground="#82CBB2" # رنگ هنگام کلیک
-          ).pack(side=tk.RIGHT, padx=5) 
-
-# نمایش تعداد تریدهای سودده و زیان‌ده (این بخش حذف شده است)
-# profit_count, loss_count = count_trades_by_type() # حذف
-# frame_counts = tk.Frame(root) # حذف
-# frame_counts.pack(pady=(5, 10)) # حذف
-# profit_label = tk.Label(frame_counts, text=f"تعداد تریدهای سودده: {profit_count}", fg="green") # حذف
-# profit_label.pack(side="left", padx=10) # حذف
-# loss_label = tk.Label(frame_counts, text=f"تعداد تریدهای زیان‌ده: {loss_count}", fg="red") # حذف
-# loss_label.pack(side="left", padx=10) # حذف
-
-# Ctrl+S
-root.bind('<Control-s>', save_trade)
+          ).pack(side=tk.RIGHT, padx=5)
+# >>>
 
 # تعداد تریدها
 trade_count_label = tk.Label(root, text="📈 تعداد کل تریدها: 0")
@@ -478,7 +483,7 @@ trade_count_label.pack(pady=5)
 update_trade_count()
 
 # پیام هشدار برای تریدهای تکراری در پایین فرم
-warning_message_text = "کاربر گرامی، ورود تریدها بصورت دستی راحت تر بوده و الزامات کمتری دارد اما در صورتیکه بعدا فایل وارد کنید، تریدهای تکراری توسط نرم افزار قابل تشخیص نیست. لذا باید آنها بصورت دستی حذف شوند"
+warning_message_text = "توجه: در صورتیکه همزمان از ورود دستی و ورود فایل استفاده کنید، برنامه قادر به تشخیص تریدهای تکراری نخواهد بود"
 warning_label = tk.Label(root, text=warning_message_text, fg="gray", font=("Segoe UI", 9), wraplength=430, justify="center")
 warning_label.pack(side=tk.BOTTOM, pady=(0, 5))
 
@@ -488,11 +493,11 @@ root.config(menu=menubar)
 
 settings_menu = tk.Menu(menubar, tearoff=0)
 menubar.add_cascade(label="تنظیمات", menu=settings_menu)
+# فراخوانی توابع از settings_manager (با آرگومان‌های صحیح)
 settings_menu.add_command(label="تنظیم منطقه زمانی...", command=lambda: settings_manager.show_timezone_settings_window(root, update_main_timezone_display_callback))
-# آرگومان‌های اضافه شده به show_rf_threshold_settings_window حذف شدند
 settings_menu.add_command(label="تعیین آستانه ریسک فری...", command=lambda: settings_manager.show_rf_threshold_settings_window(root, update_trade_count, None, None, None))
 settings_menu.add_command(label="تنظیم آستانه نمایش فراوانی خطاها...", command=lambda: settings_manager.show_error_frequency_settings_window(root))
 
-update_main_timezone_display_callback()
+update_main_timezone_display_callback() # فراخوانی اولیه برای نمایش منطقه زمانی
 
 root.mainloop()
