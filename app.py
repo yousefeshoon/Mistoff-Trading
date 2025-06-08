@@ -9,22 +9,13 @@ import pytz
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
-# ایمپورت ماژول mt5_importer
-import mt5_importer
-
-def get_resource_path(relative_path):
-    """
-    مسیر صحیح یک فایل را در محیط توسعه یا پس از کامپایل با PyInstaller برمی‌گرداند.
-    """
-    if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.join(os.path.abspath("."), relative_path)
-
-# ایمپورت کردن ماژول‌های خودت
+# ایمپورت ماژول‌های خودت
 import db_manager
+import mt5_importer
 from view_trades import show_trades_window
 from error_widget import show_error_frequency_widget
 from tkinter import simpledialog
+import settings_manager
 
 db_manager.migrate_database()
 
@@ -35,19 +26,14 @@ root.iconbitmap(os.path.join(os.path.dirname(__file__), "icon.ico"))
 root.title(f"MistOff Trading - {APP_VERSION}")
 root.geometry("450x750")
 
-# تعریف main_frame در اینجا، قبل از استفاده شدن
 main_frame = tk.Frame(root)
 main_frame.pack(padx=10, pady=10)
 
-# >>> لیبل نمایش منطقه زمانی فعال
 current_timezone_label = tk.Label(root, text="", fg="blue", font=("Segoe UI", 10, "bold"))
 current_timezone_label.pack(pady=(0, 5))
 
-def update_timezone_display():
-    current_tz_name = db_manager.get_default_timezone()
-    current_timezone_label.config(text=f"⏰ منطقه زمانی فعال: {current_tz_name}")
-
-# <<<
+def update_main_timezone_display_callback():
+    settings_manager.update_timezone_display_for_main_app(current_timezone_label)
 
 def save_trade(event=None):
     date_str = entry_date.get()
@@ -66,19 +52,14 @@ def save_trade(event=None):
         messagebox.showerror("Missing Time", "لطفاً ساعت معامله را وارد کنید.")
         return
 
-    # >>> تبدیل تاریخ و زمان ورودی دستی به UTC
     try:
-        # دریافت تایم زون فعال کاربر برای ورودی دستی
         user_timezone_name = db_manager.get_default_timezone()
         user_tz = pytz.timezone(user_timezone_name)
 
-        # ساخت datetime object naive از ورودی کاربر
         naive_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
         
-        # آگاه کردن datetime object به تایم زون کاربر
         aware_dt = user_tz.localize(naive_dt, is_dst=None)
         
-        # تبدیل به UTC برای ذخیره در دیتابیس
         utc_dt = aware_dt.astimezone(pytz.utc)
 
         date_to_save = utc_dt.strftime('%Y-%m-%d')
@@ -89,7 +70,6 @@ def save_trade(event=None):
     except Exception as e:
         messagebox.showerror("خطا", f"خطایی در تبدیل زمان رخ داد: {e}")
         return
-    # <<<
 
     if db_manager.check_duplicate_trade(date_to_save, time_to_save):
         messagebox.showerror("Duplicate Entry", "تریدی با این تاریخ و ساعت (در منطقه زمانی UTC) قبلاً ثبت شده است")
@@ -99,8 +79,6 @@ def save_trade(event=None):
         messagebox.showerror("Missing Error", "برای ترید ضررده، حداقل یک خطا باید انتخاب شود.")
         return
 
-    # اعتبارسنجی ورودی‌های عددی قبل از ذخیره
-    # از Decimal برای دقت بالاتر استفاده می‌کنیم
     try:
         entry_val = Decimal(entry) if entry else None
     except InvalidOperation:
@@ -119,7 +97,6 @@ def save_trade(event=None):
         messagebox.showerror("خطا", "سایز نامعتبر است. لطفاً یک عدد وارد کنید.")
         return
     
-    # برای تریدهای دستی، actual_profit_amount نداریم، پس None میفرستیم
     actual_profit_amount_for_manual_trade = None
 
     if not db_manager.add_trade(date_to_save, time_to_save, symbol,
@@ -171,16 +148,34 @@ def load_errors():
     return db_manager.get_all_errors()
 
 def refresh_error_checkboxes():
-    global error_names, error_vars
-    for widget in error_frame.winfo_children():
+    global error_names, error_vars, inner_error_frame, error_canvas, error_scrollbar
+    
+    # پاک کردن محتوای قبلی inner_error_frame
+    for widget in inner_error_frame.winfo_children():
         widget.destroy()
+
     error_names = load_errors()
     error_vars = {}
     for i, name in enumerate(error_names):
         var = tk.BooleanVar()
-        chk = tk.Checkbutton(error_frame, text=name, variable=var, anchor='w', justify='left')
+        chk = tk.Checkbutton(inner_error_frame, text=name, variable=var, anchor='w', justify='left', background='white')
         chk.grid(row=i, column=0, sticky='w')
         error_vars[name] = var
+    
+    # به‌روزرسانی Scroll Region پس از اضافه شدن همه چک‌باکس‌ها
+    inner_error_frame.update_idletasks() # اطمینان از به‌روزرسانی اندازه‌های ویجت‌ها
+    error_canvas.config(scrollregion=error_canvas.bbox("all"))
+
+    # نمایش یا پنهان کردن اسکرول‌بار بر اساس تعداد آیتم‌ها
+    # فرض می‌کنیم ارتفاع هر چک‌باکس حدود 20-25 پیکسل است
+    # ارتفاع 4 ردیف حدود 100 پیکسل (4 * 25)
+    if len(error_names) > 4:
+        error_canvas.config(height=100) # ارتفاع ثابت برای نمایش 4 آیتم
+        error_scrollbar.pack(side="right", fill="y", padx=(0,0))
+    else:
+        error_canvas.config(height=25 * len(error_names) if len(error_names) > 0 else 1) # ارتفاع متناسب با تعداد آیتم‌ها
+        error_scrollbar.pack_forget()
+
 
 def update_trade_count():
     count = db_manager.get_total_trades_count()
@@ -356,177 +351,6 @@ def import_trades_from_report():
         print(f"Detailed import error: {e}")
 
 
-def show_timezone_settings_window():
-    settings_win = tk.Toplevel(root)
-    settings_win.title("تنظیمات منطقه زمانی")
-    settings_win.geometry("350x200")
-    settings_win.transient(root)
-    settings_win.grab_set()
-    settings_win.resizable(False, False)
-
-    root_width = root.winfo_width()
-    root_height = root.winfo_height()
-    settings_win_width = 350
-    settings_win_height = 100
-    x = root.winfo_x() + (root_width / 2) - (settings_win_width / 2)
-    y = root.winfo_y() + (root_height / 2) - (settings_win_height / 2)
-    settings_win.geometry(f'{settings_win_width}x{settings_win_height}+{int(x)}+{int(y)}')
-
-    frame = tk.Frame(settings_win, padx=15, pady=15)
-    frame.pack(fill=tk.BOTH, expand=True)
-
-    tk.Label(frame, text="انتخاب منطقه زمانی پیش‌فرض:").grid(row=0, column=0, sticky="w", pady=5, padx=5)
-
-    common_timezones = [
-        'Asia/Tehran',
-        'UTC',
-        'Europe/London',
-        'America/New_York',
-        'America/Los_Angeles',
-        'Asia/Dubai',
-        'Asia/Tokyo',
-        'Australia/Sydney',
-        'Etc/GMT-3'
-    ]
-    current_tz = db_manager.get_default_timezone()
-    
-    tz_var = tk.StringVar(value=current_tz if current_tz in common_timezones else 'Asia/Tehran')
-    tz_dropdown = ttk.Combobox(frame, textvariable=tz_var, values=common_timezones, state="readonly", width=20)
-    tz_dropdown.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-
-    def save_settings():
-        new_tz = tz_var.get()
-        if db_manager.set_default_timezone(new_tz):
-            messagebox.showinfo("موفقیت", "منطقه زمانی با موفقیت ذخیره شد.")
-            update_timezone_display()
-            settings_win.destroy()
-        else:
-            messagebox.showerror("خطا", "خطایی در ذخیره منطقه زمانی رخ داد.")
-
-    btn_frame_settings = tk.Frame(frame)
-    btn_frame_settings.grid(row=2, column=0, columnspan=2, pady=10)
-
-    tk.Button(btn_frame_settings, text="ذخیره", command=save_settings).pack(side=tk.LEFT, padx=5)
-    tk.Button(btn_frame_settings, text="لغو", command=settings_win.destroy).pack(side=tk.LEFT, padx=5)
-
-    settings_win.focus_set()
-    settings_win.wait_window(settings_win)
-
-def show_rf_threshold_settings_window():
-    rf_win = tk.Toplevel(root)
-    rf_win.title("تنظیم آستانه ریسک فری")
-    rf_win.transient(root)
-    rf_win.grab_set()
-    rf_win.resizable(False, False)
-
-    root_width = root.winfo_width()
-    root_height = root.winfo_height()
-    rf_win_width = 350
-    rf_win_height = 150
-    x = root.winfo_x() + (root_width / 2) - (rf_win_width / 2)
-    y = root.winfo_y() + (root_height / 2) - (rf_win_height / 2)
-    rf_win.geometry(f'{rf_win_width}x{rf_win_height}+{int(x)}+{int(y)}')
-
-    frame = tk.Frame(rf_win, padx=15, pady=15)
-    frame.pack(fill=tk.BOTH, expand=True)
-
-    tk.Label(frame, text="مقدار آستانه برای ترید RF (مثلاً 1.5):").grid(row=0, column=0, sticky="w", pady=5, padx=5)
-    tk.Label(frame, text="اگر سود/ضرر بین ±این مقدار باشد، RF در نظر گرفته می‌شود.", font=("Segoe UI", 8)).grid(row=1, column=0, columnspan=2, sticky="w", padx=5, pady=(0, 10))
-
-    current_rf_threshold = db_manager.get_rf_threshold()
-    rf_threshold_var = tk.StringVar(value=str(current_rf_threshold))
-    rf_entry = tk.Entry(frame, textvariable=rf_threshold_var, width=10)
-    rf_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-
-    def save_rf_settings():
-        new_threshold_str = rf_threshold_var.get().strip()
-        try:
-            new_threshold = Decimal(new_threshold_str)
-            if new_threshold < 0:
-                messagebox.showwarning("خطا", "آستانه ریسک فری نمی‌تواند منفی باشد.")
-                return
-            
-            if db_manager.set_rf_threshold(new_threshold):
-                messagebox.showinfo("موفقیت", "آستانه ریسک فری با موفقیت ذخیره شد.")
-                # >>> فراخوانی تابع بازبینی و آپدیت تریدها
-                updated_count = db_manager.recalculate_trade_profits()
-                if updated_count > 0:
-                    messagebox.showinfo("بروزرسانی تریدها", f"{updated_count} ترید بر اساس آستانه جدید ریسک فری بروزرسانی شد.")
-                else:
-                    messagebox.showinfo("بروزرسانی تریدها", "هیچ تریدی نیاز به بروزرسانی بر اساس آستانه جدید ریسک فری نداشت.")
-                update_trade_count()
-                profit_count, loss_count = count_trades_by_type()
-                profit_label.config(text=f"تعداد تریدهای سودده: {profit_count}")
-                loss_label.config(text=f"تعداد تریدهای زیان‌ده: {loss_count}")
-                # <<<
-                rf_win.destroy()
-            else:
-                messagebox.showerror("خطا", "خطایی در ذخیره آستانه ریسک فری رخ داد.")
-        except InvalidOperation:
-            messagebox.showerror("خطا", "لطفاً یک عدد معتبر برای آستانه ریسک فری وارد کنید.")
-
-    btn_frame_rf_settings = tk.Frame(frame)
-    btn_frame_rf_settings.grid(row=3, column=0, columnspan=2, pady=10)
-
-    tk.Button(btn_frame_rf_settings, text="ذخیره", command=save_rf_settings).pack(side=tk.LEFT, padx=5)
-    tk.Button(btn_frame_rf_settings, text="لغو", command=rf_win.destroy).pack(side=tk.LEFT, padx=5)
-
-    rf_win.focus_set()
-    rf_win.wait_window(rf_win)
-
-
-def show_error_frequency_settings_window():
-    freq_win = tk.Toplevel(root)
-    freq_win.title("تنظیم آستانه درصد فراوانی خطا")
-    freq_win.transient(root)
-    freq_win.grab_set()
-    freq_win.resizable(False, False)
-
-    root_width = root.winfo_width()
-    root_height = root.winfo_height()
-    freq_win_width = 400
-    freq_win_height = 150
-    x = root.winfo_x() + (root_width / 2) - (freq_win_width / 2)
-    y = root.winfo_y() + (root_height / 2) - (freq_win_height / 2)
-    freq_win.geometry(f'{freq_win_width}x{freq_win_height}+{int(x)}+{int(y)}')
-
-    frame = tk.Frame(freq_win, padx=15, pady=15)
-    frame.pack(fill=tk.BOTH, expand=True)
-
-    tk.Label(frame, text="خطاهای با درصد فراوانی کمتر از این مقدار،\nدر ویجت نمایش داده نمی‌شوند:").grid(row=0, column=0, sticky="w", pady=5, padx=5)
-    #tk.Label(frame, text="(مثلاً 10 برای نمایش خطاهای با درصد بالای 10%)", font=("Segoe UI", 8, "italic")).grid(row=1, column=0, columnspan=2, sticky="w", padx=5, pady=(0, 10))
-
-    current_freq_threshold = db_manager.get_error_frequency_threshold()
-    freq_threshold_var = tk.StringVar(value=str(current_freq_threshold))
-    freq_entry = tk.Entry(frame, textvariable=freq_threshold_var, width=10)
-    freq_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-
-    def save_freq_settings():
-        new_threshold_str = freq_threshold_var.get().strip()
-        try:
-            new_threshold = Decimal(new_threshold_str)
-            if new_threshold < 0:
-                messagebox.showwarning("خطا", "آستانه درصد فراوانی نمی‌تواند منفی باشد.")
-                return
-            
-            if db_manager.set_error_frequency_threshold(new_threshold):
-                messagebox.showinfo("موفقیت", "آستانه درصد فراوانی با موفقیت ذخیره شد.")
-                freq_win.destroy()
-            else:
-                messagebox.showerror("خطا", "خطایی در ذخیره آستانه درصد فراوانی رخ داد.")
-        except InvalidOperation:
-            messagebox.showerror("خطا", "لطفاً یک عدد معتبر برای آستانه درصد فراوانی وارد کنید.")
-
-    btn_frame_freq_settings = tk.Frame(frame)
-    btn_frame_freq_settings.grid(row=3, column=0, columnspan=2, pady=10)
-
-    tk.Button(btn_frame_freq_settings, text="ذخیره", command=save_freq_settings).pack(side=tk.LEFT, padx=5)
-    tk.Button(btn_frame_freq_settings, text="لغو", command=freq_win.destroy).pack(side=tk.LEFT, padx=5)
-
-    freq_win.focus_set()
-    freq_win.wait_window(freq_win)
-
-
 # --- ویجت‌های فرم اصلی ---
 
 # تاریخ
@@ -571,13 +395,35 @@ profit_dropdown = ttk.Combobox(main_frame, textvariable=profit_var, values=["Pro
 profit_dropdown.current(0)
 add_labeled_entry(7, "Profit / RF / Loss:", profit_dropdown)
 
-# لیست چک‌باکس ایرادات
+# لیست چک‌باکس ایرادات (با Scrollbar)
 tk.Label(main_frame, text="Select Errors:", anchor='w').grid(row=8, column=0, sticky='ne', padx=5, pady=(10, 0))
-error_frame = tk.Frame(main_frame)
-error_frame.grid(row=8, column=1, columnspan=2, sticky='w', pady=(10, 0))
+
+# فریم اصلی برای نگه داشتن Canvas و Scrollbar
+error_scroll_frame = tk.Frame(main_frame)
+error_scroll_frame.grid(row=8, column=1, columnspan=2, sticky='w', pady=(10, 0))
+
+# Canvas برای اسکرول‌بار
+error_canvas = tk.Canvas(error_scroll_frame, borderwidth=0, background="#ffffff", highlightthickness=0, width=220)
+error_canvas.pack(side="left", fill="both", expand=False)
+
+# Scrollbar عمودی
+error_scrollbar = ttk.Scrollbar(error_scroll_frame, orient="vertical", command=error_canvas.yview)
+# هنوز پک نمی‌کنیم، فقط زمانی که نیاز شد پک می‌شود
+
+# فریم داخلی که چک‌باکس‌ها را نگه می‌دارد و داخل Canvas قرار می‌گیرد
+inner_error_frame = tk.Frame(error_canvas, background="#ffffff")
+error_canvas.create_window((0, 0), window=inner_error_frame, anchor="nw")
+
+# تنظیم اسکرول‌بار برای Canvas
+error_canvas.configure(yscrollcommand=error_scrollbar.set)
+
+# بایند کردن رویداد Configure به inner_error_frame برای به‌روزرسانی scrollregion
+inner_error_frame.bind("<Configure>", lambda e: error_canvas.configure(scrollregion=error_canvas.bbox("all")))
+
+
 error_names = []
 error_vars = {}
-refresh_error_checkboxes()
+refresh_error_checkboxes() # فراخوانی اولیه برای پر کردن چک‌باکس‌ها
 
 # دکمه ذخیره
 btn_save = tk.Button(main_frame, text="Save Trade", command=save_trade, width=20)
@@ -610,7 +456,7 @@ button_frame.pack(pady=10)
 tk.Button(button_frame, text="📄 نمایش تریدها",
           command=lambda: show_trades_window(root,
                                             refresh_main_errors_callback=refresh_error_checkboxes,
-                                            update_main_timezone_display=update_timezone_display)).pack(side=tk.LEFT, padx=5)
+                                            update_main_timezone_display=update_main_timezone_display_callback)).pack(side=tk.LEFT, padx=5)
 
 # دکمه نمایش درصد فراوانی خطاها
 tk.Button(button_frame, text="📊 فراوانی خطاها", command=lambda: show_error_frequency_widget(root)).pack(side=tk.LEFT, padx=5)
@@ -643,16 +489,16 @@ warning_message_text = "کاربر گرامی، ورود تریدها بصورت
 warning_label = tk.Label(root, text=warning_message_text, fg="gray", font=("Segoe UI", 9), wraplength=430, justify="center")
 warning_label.pack(side=tk.BOTTOM, pady=(0, 5))
 
-# >>> اضافه کردن منوی تنظیمات
+# اضافه کردن منوی تنظیمات
 menubar = tk.Menu(root)
 root.config(menu=menubar)
 
 settings_menu = tk.Menu(menubar, tearoff=0)
 menubar.add_cascade(label="تنظیمات", menu=settings_menu)
-settings_menu.add_command(label="تنظیم منطقه زمانی...", command=show_timezone_settings_window)
-settings_menu.add_command(label="تعیین آستانه ریسک فری...", command=show_rf_threshold_settings_window)
-settings_menu.add_command(label="تنظیم آستانه نمایش فراوانی خطاها...", command=show_error_frequency_settings_window)
-# <<<
+settings_menu.add_command(label="تنظیم منطقه زمانی...", command=lambda: settings_manager.show_timezone_settings_window(root, update_main_timezone_display_callback))
+settings_menu.add_command(label="تعیین آستانه ریسک فری...", command=lambda: settings_manager.show_rf_threshold_settings_window(root, update_trade_count, profit_label, loss_label, count_trades_by_type))
+settings_menu.add_command(label="تنظیم آستانه نمایش فراوانی خطاها...", command=lambda: settings_manager.show_error_frequency_settings_window(root))
 
-update_timezone_display()
+update_main_timezone_display_callback()
+
 root.mainloop()
