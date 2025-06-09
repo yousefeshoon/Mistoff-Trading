@@ -66,6 +66,7 @@ def build_widget(version_to_use): # اضافه کردن پارامتر version_t
         f"--add-data=trades.db;.",     # دیتابیس را در پکیج بسته‌بندی کند
         f"--add-data=db_manager.py;.", # db_manager.py را هم بسته‌بندی کند (هرچند ایمپورت می‌شود)
         f"--add-data=version_info.py;.", # version_info.py را هم بسته‌بندی کند
+        f"--add-data=assets;assets",
         WIDGET_SCRIPT      # فایل اصلی که باید بیلد شود
     ]
 

@@ -425,7 +425,7 @@ btn_save.grid(row=9, column=0, columnspan=3, pady=20)
 
 
 # --- بخش جدید برای وارد کردن فایل Excel ---
-report_import_frame = tk.LabelFrame(root, text="وارد کردن از گزارش MT5 (اکسل)")
+report_import_frame = tk.LabelFrame(root, text="وارد کردن از گزارش متاتریدر (اکسل)")
 report_import_frame.pack(padx=10, pady=10, fill=tk.X)
 
 report_file_path_var = tk.StringVar()

@@ -57,6 +57,7 @@ def build_with_version(version):
         f"--add-data={icon_file};.", # icon.ico را در ریشه بسته‌بندی می‌کند
         f"--add-data=trades.db;.", # trades.db را در ریشه بسته‌بندی می‌کند
         f"--add-data=version_info.py;.", # version_info.py را در ریشه بسته‌بندی می‌کند
+        f"--add-data=assets;assets",
         main_script
     ]
 

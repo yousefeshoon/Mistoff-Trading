@@ -36,7 +36,6 @@ def create_report_card(parent_frame, image_path, title, description, button_text
             original_image = Image.open(image_path)
             # تغییر اندازه به ابعاد 16:9
             resized_image = original_image.resize((target_img_width, target_img_height), Image.LANCZOS)
-            # <<< تغییر اینجا: استفاده از ImageTk.PhotoImage و bg=card_frame.cget('bg')
             photo = ImageTk.PhotoImage(resized_image)
             
             image_label = tk.Label(card_frame, image=photo, bg=card_frame.cget('bg')) # پس‌زمینه لیبل رو از کارت می‌گیره
@@ -61,7 +60,7 @@ def create_report_card(parent_frame, image_path, title, description, button_text
     # دکمه (این بار از tk.Button استفاده می‌کنیم برای کنترل بهتر رنگ)
     action_button = tk.Button(card_frame, text=button_text, command=command,
                               bg="#4285F4", fg="white", 
-                              font=("Tahoma", 10, "bold"),
+                              font=("Segoe UI", 10, "bold"),
                               borderwidth=0, relief="flat", 
                               padx=10, pady=5, 
                               activebackground="#3367D6", 
@@ -101,8 +100,8 @@ def show_report_selection_window(parent_root):
     screen_width = reports_win.winfo_screenwidth()
     screen_height = reports_win.winfo_screenheight()
 
-    base_width = 800
-    win_height = 500
+    base_width = 850
+    win_height = 720 # <<< ارتفاع پنجره رو افزایش دادیم تا دو ردیف کارت جا بشن
 
     win_width = int(base_width * 1.20)
 
@@ -114,35 +113,56 @@ def show_report_selection_window(parent_root):
     main_frame = tk.Frame(reports_win, bg="white", padx=20, pady=20)
     main_frame.pack(fill=tk.BOTH, expand=True)
 
-    title_label = tk.Label(main_frame, text="انتخاب نوع گزارش", font=("Segoe UI", 18, "bold"), bg="white", fg="#333333")
-    title_label.pack(pady=(0, 20))
+    #title_label = tk.Label(main_frame, text="انتخاب نوع گزارش", font=("Segoe UI", 18, "bold"), bg="white", fg="#333333")
+    #title_label.pack(pady=(0, 20))
 
     cards_frame = tk.Frame(main_frame, bg="white")
     cards_frame.pack(pady=10) 
 
+    # استفاده از Grid برای چیدمان کارت‌ها در cards_frame
     cards_frame.grid_columnconfigure(0, weight=1) 
     cards_frame.grid_columnconfigure(1, weight=1)
     cards_frame.grid_columnconfigure(2, weight=1)
+    cards_frame.grid_rowconfigure(0, weight=1) # <<< اضافه شده: پیکربندی ردیف اول
+    cards_frame.grid_rowconfigure(1, weight=1) # <<< اضافه شده: پیکربندی ردیف دوم
 
-    def open_comprehensive_report():
-        messagebox.showinfo("گزارش جامع", "صفحه گزارش جامع تریدها به زودی اینجا بارگذاری می‌شود!")
 
-    def open_error_analysis_report():
-        messagebox.showinfo("تحلیل خطاها", "صفحه تحلیل خطاها و درس‌های آموخته به زودی اینجا بارگذاری می‌شود!")
+    # توابع برای دکمه‌های گزارشات - نام‌گذاری جدید
+    def open_weekly_error_analysis_report():
+        messagebox.showinfo("بررسی روزهای هفته", "صفحه آنالیز روزهای هفته به زودی اینجا بارگذاری می‌شود!")
+        # اینجا بعداً پنجره گزارش روزهای هفته را باز خواهیم کرد
+        # from weekly_error_report import show_weekly_error_report_window
+        # show_weekly_error_report_window(reports_win)
 
-    def open_performance_stats_report():
-        messagebox.showinfo("آمار عملکرد", "صفحه گزارش آماری عملکرد به زودی اینجا بارگذاری می‌شود!")
+    def open_hourly_error_analysis_report():
+        messagebox.showinfo("بررسی ساعات پر اشتباه", "صفحه آنالیز ساعات پر اشتباه به زودی اینجا بارگذاری می‌شود!")
+        # اینجا بعداً پنجره گزارش ساعات پر اشتباه را باز خواهیم کرد
+
+    def open_trading_sessions_report():
+        messagebox.showinfo("بررسی سشن‌های معاملاتی", "صفحه آنالیز سشن‌های معاملاتی به زودی اینجا بارگذاری می‌شود!")
+        # اینجا بعداً پنجره گزارش سشن‌های معاملاتی را باز خواهیم کرد
+
+    # توابع موقتی برای کارت‌های ردیف دوم
+    def open_temp_report_4():
+        messagebox.showinfo("گزارش موقت 4", "این گزارش در دست توسعه است!")
+
+    def open_temp_report_5():
+        messagebox.showinfo("گزارش موقت 5", "این گزارش در دست توسعه است!")
+
+    def open_temp_report_6():
+        messagebox.showinfo("گزارش موقت 6", "این گزارش در دست توسعه است!")
+
 
     # تعریف کارت‌ها و قرار دادن آنها در grid
+    # ردیف اول (row=0)
     # به ترتیب راست به چپ (اولین کارت سمت راست است)
-    # ایندکس‌های ستون را برعکس می‌دهیم تا از راست به چپ چیده شوند
     card1 = create_report_card(
         cards_frame, 
         image_path=get_resource_path("assets/card1.png"), 
         title="بررسی روزهای هفته",
         description="آنالیز تکرار اشتباهات مختلف رو در روزهای هفته بررسی و گزارش بگیرید",
         button_text="برو بریم",
-        command=open_comprehensive_report
+        command=open_weekly_error_analysis_report # <<< نام تابع تغییر کرد
     )
     card1.grid(row=0, column=2, padx=15, pady=10) 
 
@@ -152,21 +172,56 @@ def show_report_selection_window(parent_root):
         title="بررسی ساعات پر اشتباه",
         description="ساعات مختلف روز رو بر اساس تکرار اشتباهات مختلف بررسی کنید و بهتر تصمیم بگیرید",
         button_text="برو بریم",
-        command=open_error_analysis_report,
-        #is_coming_soon=True 
+        command=open_hourly_error_analysis_report, # <<< نام تابع تغییر کرد
+        #is_coming_soon=True # این رو اگه نیازی به "به زودی" نداشتیم فعال می‌کنیم
     )
     card2.grid(row=0, column=1, padx=15, pady=10) 
 
     card3 = create_report_card(
         cards_frame,
-        image_path="", # اینجا مسیر واقعی عکس را بگذارید
-        title="آمار عملکرد",
-        description="گزارش‌های آماری از سوددهی، وین ریت، میزان ریسک و سایر شاخص‌های عملکرد.",
+        image_path=get_resource_path("assets/card3.png"), # اینجا مسیر واقعی عکس را بگذارید
+        title="بررسی سشن‌های معاملاتی",
+        description="آنالیز اشتباهات رو در سشن‌های مختلف بررسی کنید",
         button_text="برو بریم",
-        command=open_performance_stats_report,
-        is_coming_soon=True 
+        command=open_trading_sessions_report, # <<< نام تابع تغییر کرد
+        #is_coming_soon=True 
     )
     card3.grid(row=0, column=0, padx=15, pady=10) 
+
+    # ردیف دوم (row=1) - کارت‌های موقتی
+    card4 = create_report_card(
+        cards_frame, 
+        image_path=get_resource_path("assets/card4.png"), # مسیر عکس
+        title="بررسی حجم معاملات",
+        description="اینجا آنالیز تکرار اشتباهات در حجم‌های معاملاتی مختلف رو دارید",
+        button_text="برو بریم",
+        command=open_temp_report_4,
+        #is_coming_soon=True
+    )
+    card4.grid(row=1, column=2, padx=15, pady=10)
+
+    card5 = create_report_card(
+        cards_frame, 
+        image_path=get_resource_path("assets/card5.png"), # مسیر عکس
+        title="بررسی نمادهای معاملاتی",
+        description="تکرار اشتباهات رو در نمادهای مختلف معاملاتی آنالیز کنید",
+        button_text="برو بریم",
+        command=open_temp_report_5,
+        #is_coming_soon=True
+    )
+    card5.grid(row=1, column=1, padx=15, pady=10)
+
+    card6 = create_report_card(
+        cards_frame, 
+        image_path="", # مسیر عکس
+        title="گزارش موقت ۶",
+        description="این یک گزارش آزمایشی است که در آینده به عنوان یک ویژگی جدید تکمیل خواهد شد.",
+        button_text="برو بریم",
+        command=open_temp_report_6,
+        is_coming_soon=True
+    )
+    card6.grid(row=1, column=0, padx=15, pady=10)
+
 
     reports_win.focus_set()
     reports_win.wait_window(reports_win)
