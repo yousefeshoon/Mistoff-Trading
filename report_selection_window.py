@@ -213,12 +213,12 @@ def show_report_selection_window(parent_root):
 
     card6 = create_report_card(
         cards_frame, 
-        image_path="", # مسیر عکس
-        title="گزارش موقت ۶",
-        description="این یک گزارش آزمایشی است که در آینده به عنوان یک ویژگی جدید تکمیل خواهد شد.",
+        image_path=get_resource_path("assets/card6.png"), # مسیر عکس
+        title="گزارش کلی",
+        description="!کی از یه گزارش جامع و سراسر نکته بدش میاد",
         button_text="برو بریم",
         command=open_temp_report_6,
-        is_coming_soon=True
+        #is_coming_soon=True
     )
     card6.grid(row=1, column=0, padx=15, pady=10)
 
