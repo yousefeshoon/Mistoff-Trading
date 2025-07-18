@@ -51,7 +51,7 @@ root.geometry(f'{main_form_width}x{main_form_height}+{int(x_position)}+{int(y_po
 main_frame = tk.Frame(root)
 main_frame.pack(padx=10, pady=10)
 
-current_timezone_label = tk.Label(root, text="", fg="blue", font=("Vazirmatn", 10, "bold"))
+current_timezone_label = tk.Label(root, text="", fg="blue", font=("Segoe UI", 10, "bold"))
 current_timezone_label.pack(pady=(0, 5))
 
 # تابع کال‌بک برای به‌روزرسانی نمایش منطقه زمانی (از settings_manager فراخوانی می‌شود)
@@ -479,7 +479,7 @@ tk.Button(button_frame, text="📊 فراوانی خطاها", command=lambda: s
 
 # دکمه "گزارش جامع" که به سمت راست می‌چسبد
 tk.Button(button_frame, text="📊 گزارش جامع",
-          command=lambda: report_selection_window.ReportSelectionWindow(root, OPEN_TOPLEVEL_WINDOWS),
+          command=lambda: report_selection_window.show_report_selection_window(root, OPEN_TOPLEVEL_WINDOWS),
           bg="#A9DFBF", # رنگ پس زمینه متفاوت
           activebackground="#82CBB2" # رنگ هنگام کلیک
           ).pack(side=tk.RIGHT, padx=5) 
@@ -510,7 +510,7 @@ update_trade_count()
 
 # پیام هشدار برای تریدهای تکراری در پایین فرم
 warning_message_text = "توجه: در صورتیکه همزمان از ورود دستی و ورود فایل استفاده کنید، برنامه قادر به تشخیص تریدهای تکراری نخواهد بود"
-warning_label = tk.Label(root, text=warning_message_text, fg="gray", font=("Vazirmatn", 9), wraplength=430, justify="center")
+warning_label = tk.Label(root, text=warning_message_text, fg="gray", font=("Segoe UI", 9), wraplength=430, justify="center")
 warning_label.pack(side=tk.BOTTOM, pady=(0, 5))
 
 # اضافه کردن منوی تنظیمات

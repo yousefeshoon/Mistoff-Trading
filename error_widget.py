@@ -9,7 +9,7 @@ import version_info
 import report_selection_window 
 
 # تابع اصلی که حالا یک پنجره والد (parent) می‌گیرد
-def show_error_frequency_widget(parent_window=None):
+def show_error_frequency_widget(parent_window=None, open_toplevel_windows_list=None):
     # این متغیرها را اینجا تعریف می‌کنیم تا در scope بیرونی load_and_display_errors باشند
     # و بتوان از nonlocal برای ارجوع به آن‌ها از داخل تابع استفاده کرد.
     tree_frame = None
@@ -108,8 +108,21 @@ def show_error_frequency_widget(parent_window=None):
         root = tk.Tk()
         root.attributes('-topmost', True)
         root.resizable(False, False)
-        root.bind('<Escape>', lambda e: root.destroy())
-        root.protocol("WM_DELETE_WINDOW", root.destroy)
+        # توجه: اگر به صورت مستقل اجرا شود، مدیریت OPEN_TOPLEVEL_WINDOWS اینجا نیاز نیست.
+        # فقط وقتی به عنوان Toplevel در برنامه اصلی باز می‌شود، باید به لیست اضافه شود.
+    
+    # اضافه کردن پنجره به لیست
+    if open_toplevel_windows_list is not None:
+        open_toplevel_windows_list.append(root) # <<< اضافه شده
+
+    # تابع برای حذف پنجره از لیست هنگام بسته شدن
+    def on_error_widget_close():
+        if open_toplevel_windows_list is not None and root in open_toplevel_windows_list:
+            open_toplevel_windows_list.remove(root) # <<< اضافه شده
+        root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", on_error_widget_close) # <<< اضافه شده: هندل کردن دکمه بستن
+
 
     root.title(f" فراوانی خطاها - {version_info.__version__}")
     root.geometry("320x300")

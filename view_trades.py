@@ -10,7 +10,7 @@ import pytz # برای کار با تایم زون
 from datetime import datetime
 
 # تابع اصلی برای نمایش پنجره تریدها
-def show_trades_window(root, refresh_main_errors_callback=None, update_main_timezone_display=None): # اضافه شدن آرگومان‌ها
+def show_trades_window(root, refresh_main_errors_callback=None, update_main_timezone_display=None, open_toplevel_windows_list=None): # اضافه شدن آرگومان‌ها
     def load_trades():
         tree.delete(*tree.get_children())
         
@@ -295,6 +295,17 @@ def show_trades_window(root, refresh_main_errors_callback=None, update_main_time
     trades_win = tk.Toplevel(root)
     trades_win.title("همه‌ی تریدها")
     trades_win.geometry("1000x450") 
+
+    if open_toplevel_windows_list is not None:
+        open_toplevel_windows_list.append(trades_win) # <<< اضافه شده
+
+    # تابع برای حذف پنجره از لیست هنگام بسته شدن
+    def on_trades_win_close():
+        if open_toplevel_windows_list is not None and trades_win in open_toplevel_windows_list:
+            open_toplevel_windows_list.remove(trades_win) # <<< اضافه شده
+        trades_win.destroy()
+
+    trades_win.protocol("WM_DELETE_WINDOW", on_trades_win_close) # <<< اضافه شده: هندل کردن دکمه بستن
 
     # >>> اضافه شدن لیبل نمایش تایم زون
     current_display_timezone_label = tk.Label(trades_win, text="", fg="blue", font=("Segoe UI", 9, "bold"))
