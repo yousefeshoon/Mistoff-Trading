@@ -43,8 +43,8 @@ class WeekdayFilterFrame(ctk.CTkFrame):
 
         self._load_weekdays() # Initial loading. **No on_change_callback here anymore.**
 
-        self.settings_hint_label = ctk.CTkLabel(self, text=process_persian_text_for_matplotlib("روزهای کاری را از بخش تنظیمات برنامه تغییر دهید."),
-                                                font=("Vazirmatn", 9, "italic"), text_color="gray50", anchor="e", wraplength=250)
+        self.settings_hint_label = ctk.CTkLabel(self, text=process_persian_text_for_matplotlib("روزهای کاری مطابق تنظیمات کاربر انتخاب شده‌اند."),
+                                                font=("Vazirmatn", 11), text_color="gray50", anchor="e", wraplength=250)
         self.settings_hint_label.grid(row=2, column=0, padx=5, pady=(0,5), sticky="ew")
 
 

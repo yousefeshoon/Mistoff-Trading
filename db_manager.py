@@ -991,3 +991,4 @@ def delete_report_template(template_id):
 if __name__ == '__main__':
     migrate_database()
     print("Database schema checked and migrated if necessary.")
+    

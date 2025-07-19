@@ -28,7 +28,7 @@ class HourlyFilterFrame(ctk.CTkFrame):
         # Hint Label: Shows that hours are filtered by selected sessions
         self.session_filter_hint_label = ctk.CTkLabel(self, 
                                                       text=process_persian_text_for_matplotlib("توجه: ساعات قابل انتخاب بر اساس سشن‌های انتخابی شما در تب 'سشن‌های معاملاتی' فیلتر شده‌اند."),
-                                                      font=("Vazirmatn", 9, "italic"), text_color="gray50", anchor="e", wraplength=300)
+                                                      font=("Vazirmatn", 11), text_color="gray50", anchor="e", wraplength=300)
         self.session_filter_hint_label.grid(row=0, column=0, columnspan=2, padx=5, pady=(5, 10), sticky="ew")
 
         # Radio Buttons for Selection Modes
@@ -231,7 +231,7 @@ class HourlyFilterFrame(ctk.CTkFrame):
                 display_sessions_texts = []
                 # Define local session_names_map inside this function as it's used for display logic
                 local_session_names_map = {
-                    'ny': 'نیویورک', 'sydney': 'سیدنی', 'tokyo': 'توکیو', 'london': 'لندن'
+                    'ny': 'Newyork', 'sydney': 'Sydney', 'tokyo': 'Tokyo', 'london': 'London'
                 }
                 for details in active_sessions_for_display:
                     session_key_for_display = next((k for k,v in self.available_session_details.items() if v == details), None)
@@ -278,7 +278,7 @@ class HourlyFilterFrame(ctk.CTkFrame):
 
                 # Define local session names map for display purposes
                 local_session_names_map = {
-                    'ny': 'نیویورک', 'sydney': 'سیدنی', 'tokyo': 'توکیو', 'london': 'لندن'
+                    'ny': 'Newyork', 'sydney': 'Sydney', 'tokyo': 'Tokyo', 'london': 'London'
                 }
 
                 for session in sessions_to_segment:
@@ -485,7 +485,7 @@ class HourlyFilterFrame(ctk.CTkFrame):
 
                 # Define local session names map for display purposes (though not used here, useful for context)
                 local_session_names_map = {
-                    'ny': 'نیویورک', 'sydney': 'سیدنی', 'tokyo': 'توکیو', 'london': 'لندن'
+                    'ny': 'Newyork', 'sydney': 'Sydney', 'tokyo': 'Tokyo', 'london': 'London'
                 }
 
                 for session in sessions_to_segment:

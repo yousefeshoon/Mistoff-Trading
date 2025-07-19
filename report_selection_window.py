@@ -60,13 +60,13 @@ class ReportSelectionWindow(ctk.CTkToplevel):
 
         # افزایش عرض پنجره برای جا شدن دکمه‌ها و محتوا
         win_width = int(screen_width * 0.8)
-        win_height = int(screen_height * 0.9)
+        win_height = int(screen_height * 0.8)
 
         x = (screen_width / 2) - (win_width / 2)
         y = (screen_height / 2) - (win_height / 2)
 
         self.geometry(f'{win_width}x{win_height}+{int(x)}+{int(y)}')
-        self.configure(fg_color="#F0F2F5")
+        self.configure(fg_color="#F0F2F5") # Light gray background for the window
 
         self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
@@ -343,6 +343,16 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         darker_rgb = tuple(max(0, c - int(c * percent / 100)) for c in rgb)
         return '#%02x%02x%02x' % darker_rgb
 
+    def _lighten_color(self, hex_color, percent):
+        """
+        Lightens a given hex color by a specified percentage.
+        Returns the lighter color as a hex string.
+        """
+        hex_color = hex_color.lstrip('#')
+        rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        lighter_rgb = tuple(min(255, c + int((255 - c) * percent / 100)) for c in rgb)
+        return '#%02x%02x%02x' % lighter_rgb
+
     def _get_original_button_color(self, key):
         base_colors = [
             "#007BFF", "#28A745", "#FFC107", "#6F42C1", "#DC3545", "#17A2B8", "#6C757D"
@@ -377,7 +387,22 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         for widget in self.summary_table_frame.winfo_children():
             widget.destroy()
 
-        summary_data = []
+        summary_display_limit = 4 # Max number of buttons before 'و...'
+        current_row = 0
+
+        # Define button colors for each filter category
+        # These are lightened versions of the main filter buttons
+        button_category_colors = {
+            "date_range": self._lighten_color("#007BFF", 85), # Blue-ish for Date Range
+            "instruments": self._lighten_color("#28A745", 85), # Green-ish for Instruments
+            "weekday": self._lighten_color("#FFC107", 85),    # Yellow-ish for Weekday
+            "sessions": self._lighten_color("#6F42C1", 85),   # Purple-ish for Sessions
+            "hourly": self._lighten_color("#DC3545", 85),     # Red-ish for Hourly
+            "trade_type": self._lighten_color("#17A2B8", 85), # Cyan-ish for Trade Type
+            "errors": self._lighten_color("#6C757D", 85)      # Gray-ish for Errors
+        }
+        
+        button_text_color = "#212121" # Dark text for light buttons
 
         all_filters_data = {}
         for key in ["date_range", "instruments", "weekday", "sessions", "hourly", "trade_type", "errors"]:
@@ -386,55 +411,303 @@ class ReportSelectionWindow(ctk.CTkToplevel):
             else:
                 all_filters_data[key] = "خطا در بارگذاری"
 
-        summary_data.append((process_persian_text_for_matplotlib('بازه تاریخی:'), f"{process_persian_text_for_matplotlib(all_filters_data['date_range']['start_date'])} {process_persian_text_for_matplotlib('تا')} {process_persian_text_for_matplotlib(all_filters_data['date_range']['end_date'])}"))
+        # --- Date Range ---
+        date_range_selection = all_filters_data['date_range']
+        date_label = ctk.CTkLabel(self.summary_table_frame, text=process_persian_text_for_matplotlib('بازه تاریخی:'),
+                                 font=("Vazirmatn", 12), text_color="#424242", anchor='e')
+        date_label.grid(row=current_row, column=1, sticky='e', padx=2, pady=1)
+
+        date_value_frame = ctk.CTkFrame(self.summary_table_frame, fg_color="transparent")
+        date_value_frame.grid(row=current_row, column=0, sticky='ew', padx=2, pady=1)
+        date_value_frame.grid_columnconfigure(0, weight=1) # To center buttons if only one
+
+        date_items = [
+            process_persian_text_for_matplotlib(date_range_selection['start_date']),
+            process_persian_text_for_matplotlib('تا'),
+            process_persian_text_for_matplotlib(date_range_selection['end_date'])
+        ]
+        
+        # Adjust layout for date buttons. Since it's fixed (from/to), no 'و...' needed.
+        # We'll use a nested frame for the buttons to control their alignment within column 0.
+        inner_date_buttons_frame = ctk.CTkFrame(date_value_frame, fg_color="transparent")
+        inner_date_buttons_frame.pack(side="right", anchor="e") # Pack to the right within its cell
+        
+        # Start Date Button
+        ctk.CTkButton(inner_date_buttons_frame,
+                        text=date_items[0],
+                        font=("Vazirmatn", 11, "bold"),
+                        fg_color=button_category_colors["date_range"],
+                        text_color=button_text_color,
+                        hover_color=button_category_colors["date_range"], # No hover effect for summary buttons
+                        corner_radius=15, width=90, height=25).pack(side="right", padx=2)
+        
+        # 'تا' Label
+        ctk.CTkLabel(inner_date_buttons_frame,
+                     text=date_items[1],
+                     font=("Vazirmatn", 11),
+                     text_color=button_text_color).pack(side="right", padx=2)
+
+        # End Date Button
+        ctk.CTkButton(inner_date_buttons_frame,
+                        text=date_items[2],
+                        font=("Vazirmatn", 11, "bold"),
+                        fg_color=button_category_colors["date_range"],
+                        text_color=button_text_color,
+                        hover_color=button_category_colors["date_range"],
+                        corner_radius=15, width=90, height=25).pack(side="right", padx=2)
+        
+        current_row += 1
+
+        # --- Instruments ---
+        instrument_label = ctk.CTkLabel(self.summary_table_frame, text=process_persian_text_for_matplotlib('نمادها:'),
+                                        font=("Vazirmatn", 12), text_color="#424242", anchor='e')
+        instrument_label.grid(row=current_row, column=1, sticky='e', padx=2, pady=1)
+
+        instruments_value_frame = ctk.CTkFrame(self.summary_table_frame, fg_color="transparent")
+        instruments_value_frame.grid(row=current_row, column=0, sticky='ew', padx=2, pady=1)
+        
+        # Use pack for inner buttons, aligned to the right
+        inner_instruments_buttons_frame = ctk.CTkFrame(instruments_value_frame, fg_color="transparent")
+        inner_instruments_buttons_frame.pack(side="right", anchor="e")
 
         selected_instruments = all_filters_data['instruments']
-        if selected_instruments == "همه": # اگر "همه" انتخاب شده بود
-            summary_data.append((process_persian_text_for_matplotlib('نمادها:'), process_persian_text_for_matplotlib('همه')))
-        elif isinstance(selected_instruments, list) and selected_instruments: # اگر لیست غیرخالی از نمادها بود
-            summary_data.append((process_persian_text_for_matplotlib('نمادها:'), process_persian_text_for_matplotlib(', '.join(selected_instruments))))
-        else: # اگر لیست خالی بود (هیچکدام انتخاب نشده)
-            summary_data.append((process_persian_text_for_matplotlib('نمادها:'), process_persian_text_for_matplotlib('هیچکدام')))
+        if selected_instruments == "همه":
+            ctk.CTkButton(inner_instruments_buttons_frame,
+                            text=process_persian_text_for_matplotlib('همه'),
+                            font=("Vazirmatn", 11, "bold"),
+                            fg_color=button_category_colors["instruments"],
+                            text_color=button_text_color,
+                            hover_color=button_category_colors["instruments"],
+                            corner_radius=15, width=60, height=25).pack(side="right", padx=2)
+        elif isinstance(selected_instruments, list) and selected_instruments:
+            displayed_count = 0
+            for symbol in selected_instruments:
+                if displayed_count < summary_display_limit:
+                    ctk.CTkButton(inner_instruments_buttons_frame,
+                                    text=process_persian_text_for_matplotlib(symbol),
+                                    font=("Vazirmatn", 11, "bold"),
+                                    fg_color=button_category_colors["instruments"],
+                                    text_color=button_text_color,
+                                    hover_color=button_category_colors["instruments"],
+                                    corner_radius=15, width=70, height=25).pack(side="right", padx=2)
+                    displayed_count += 1
+                else:
+                    ctk.CTkLabel(inner_instruments_buttons_frame,
+                                 text=process_persian_text_for_matplotlib(f"و... ({len(selected_instruments) - displayed_count} مورد دیگر)"),
+                                 font=("Vazirmatn", 11), text_color=button_text_color).pack(side="right", padx=2)
+                    break
+        else:
+            ctk.CTkButton(inner_instruments_buttons_frame,
+                            text=process_persian_text_for_matplotlib('هیچکدام'),
+                            font=("Vazirmatn", 11, "bold"),
+                            fg_color=button_category_colors["instruments"],
+                            text_color=button_text_color,
+                            hover_color=button_category_colors["instruments"],
+                            corner_radius=15, width=80, height=25).pack(side="right", padx=2)
+        current_row += 1
+
+        # --- Weekdays ---
+        weekday_label = ctk.CTkLabel(self.summary_table_frame, text=process_persian_text_for_matplotlib('روزهای هفته:'),
+                                     font=("Vazirmatn", 12), text_color="#424242", anchor='e')
+        weekday_label.grid(row=current_row, column=1, sticky='e', padx=2, pady=1)
+
+        weekday_value_frame = ctk.CTkFrame(self.summary_table_frame, fg_color="transparent")
+        weekday_value_frame.grid(row=current_row, column=0, sticky='ew', padx=2, pady=1)
+
+        inner_weekday_buttons_frame = ctk.CTkFrame(weekday_value_frame, fg_color="transparent")
+        inner_weekday_buttons_frame.pack(side="right", anchor="e")
 
         selected_weekdays = all_filters_data['weekday']
-        if isinstance(selected_weekdays, list) and selected_weekdays:
+        if selected_weekdays == "همه":
+            ctk.CTkButton(inner_weekday_buttons_frame,
+                            text=process_persian_text_for_matplotlib('همه'),
+                            font=("Vazirmatn", 11, "bold"),
+                            fg_color=button_category_colors["weekday"],
+                            text_color=button_text_color,
+                            hover_color=button_category_colors["weekday"],
+                            corner_radius=15, width=60, height=25).pack(side="right", padx=2)
+        elif isinstance(selected_weekdays, list) and selected_weekdays:
             weekday_names_map = {
                 0: "دوشنبه", 1: "سه‌شنبه", 2: "چهارشنبه", 3: "پنج‌شنبه", 4: "جمعه", 5: "شنبه", 6: "یکشنبه"
             }
             display_weekdays = [weekday_names_map.get(idx, str(idx)) for idx in sorted(selected_weekdays)]
-            summary_data.append((process_persian_text_for_matplotlib('روزهای هفته:'), process_persian_text_for_matplotlib(', '.join(display_weekdays))))
+            
+            displayed_count = 0
+            for day_name in display_weekdays:
+                if displayed_count < summary_display_limit:
+                    ctk.CTkButton(inner_weekday_buttons_frame,
+                                    text=process_persian_text_for_matplotlib(day_name),
+                                    font=("Vazirmatn", 11, "bold"),
+                                    fg_color=button_category_colors["weekday"],
+                                    text_color=button_text_color,
+                                    hover_color=button_category_colors["weekday"],
+                                    corner_radius=15, width=80, height=25).pack(side="right", padx=2)
+                    displayed_count += 1
+                else:
+                    ctk.CTkLabel(inner_weekday_buttons_frame,
+                                 text=process_persian_text_for_matplotlib(f"و... ({len(display_weekdays) - displayed_count} مورد دیگر)"),
+                                 font=("Vazirmatn", 11), text_color=button_text_color).pack(side="right", padx=2)
+                    break
         else:
-            summary_data.append((process_persian_text_for_matplotlib('روزهای هفته:'), process_persian_text_for_matplotlib(selected_weekdays)))
+             ctk.CTkButton(inner_weekday_buttons_frame,
+                            text=process_persian_text_for_matplotlib('هیچکدام'),
+                            font=("Vazirmatn", 11, "bold"),
+                            fg_color=button_category_colors["weekday"],
+                            text_color=button_text_color,
+                            hover_color=button_category_colors["weekday"],
+                            corner_radius=15, width=80, height=25).pack(side="right", padx=2)
+        current_row += 1
+
+        # --- Sessions ---
+        session_label = ctk.CTkLabel(self.summary_table_frame, text=process_persian_text_for_matplotlib('سشن‌ها:'),
+                                     font=("Vazirmatn", 12), text_color="#424242", anchor='e')
+        session_label.grid(row=current_row, column=1, sticky='e', padx=2, pady=1)
+
+        session_value_frame = ctk.CTkFrame(self.summary_table_frame, fg_color="transparent")
+        session_value_frame.grid(row=current_row, column=0, sticky='ew', padx=2, pady=1)
+
+        inner_session_buttons_frame = ctk.CTkFrame(session_value_frame, fg_color="transparent")
+        inner_session_buttons_frame.pack(side="right", anchor="e")
 
         selected_sessions = all_filters_data['sessions']
-        if isinstance(selected_sessions, list) and selected_sessions:
+        if selected_sessions == "همه":
+            ctk.CTkButton(inner_session_buttons_frame,
+                            text=process_persian_text_for_matplotlib('همه'),
+                            font=("Vazirmatn", 11, "bold"),
+                            fg_color=button_category_colors["sessions"],
+                            text_color=button_text_color,
+                            hover_color=button_category_colors["sessions"],
+                            corner_radius=15, width=60, height=25).pack(side="right", padx=2)
+        elif isinstance(selected_sessions, list) and selected_sessions:
             user_tz = db_manager.get_default_timezone()
             all_session_details = db_manager.get_session_times_with_display_utc(user_tz)
-
+            session_filter_instance = self.filter_frames["sessions"] # Access session_names_map
+            
             display_sessions_texts = []
             for key in selected_sessions:
                 details = all_session_details.get(key)
                 if details:
-                    session_filter_instance = self.filter_frames["sessions"]
                     session_display_name = session_filter_instance.session_names_map.get(key, key.capitalize())
                     display_sessions_texts.append(f"{session_display_name} ({details['start_display']} - {details['end_display']})")
-            if display_sessions_texts:
-                summary_data.append((process_persian_text_for_matplotlib('سشن‌ها:'), process_persian_text_for_matplotlib(', '.join(display_sessions_texts))))
-        else:
-            summary_data.append((process_persian_text_for_matplotlib('سشن‌ها:'), process_persian_text_for_matplotlib(selected_sessions)))
 
-        summary_data.append((process_persian_text_for_matplotlib('نوع ترید:'), process_persian_text_for_matplotlib(all_filters_data['trade_type'])))
+            displayed_count = 0
+            for session_text in display_sessions_texts:
+                if displayed_count < summary_display_limit:
+                    ctk.CTkButton(inner_session_buttons_frame,
+                                    text=process_persian_text_for_matplotlib(session_text),
+                                    font=("Vazirmatn", 11, "bold"),
+                                    fg_color=button_category_colors["sessions"],
+                                    text_color=button_text_color,
+                                    hover_color=button_category_colors["sessions"],
+                                    corner_radius=15, width=120, height=25).pack(side="right", padx=2)
+                    displayed_count += 1
+                else:
+                    ctk.CTkLabel(inner_session_buttons_frame,
+                                 text=process_persian_text_for_matplotlib(f"و... ({len(display_sessions_texts) - displayed_count} مورد دیگر)"),
+                                 font=("Vazirmatn", 11), text_color=button_text_color).pack(side="right", padx=2)
+                    break
+        else:
+            ctk.CTkButton(inner_session_buttons_frame,
+                            text=process_persian_text_for_matplotlib('هیچکدام'),
+                            font=("Vazirmatn", 11, "bold"),
+                            fg_color=button_category_colors["sessions"],
+                            text_color=button_text_color,
+                            hover_color=button_category_colors["sessions"],
+                            corner_radius=15, width=80, height=25).pack(side="right", padx=2)
+        current_row += 1
+
+        # --- Trade Type ---
+        trade_type_label = ctk.CTkLabel(self.summary_table_frame, text=process_persian_text_for_matplotlib('نوع ترید:'),
+                                        font=("Vazirmatn", 12), text_color="#424242", anchor='e')
+        trade_type_label.grid(row=current_row, column=1, sticky='e', padx=2, pady=1)
+
+        trade_type_value_frame = ctk.CTkFrame(self.summary_table_frame, fg_color="transparent")
+        trade_type_value_frame.grid(row=current_row, column=0, sticky='ew', padx=2, pady=1)
+
+        inner_trade_type_buttons_frame = ctk.CTkFrame(trade_type_value_frame, fg_color="transparent")
+        inner_trade_type_buttons_frame.pack(side="right", anchor="e")
+
+        selected_trade_type = all_filters_data['trade_type']
+        # No 'و...' needed as it's a single selection
+        display_trade_type_text = ""
+        if selected_trade_type == "همه": display_trade_type_text = process_persian_text_for_matplotlib("همه انواع")
+        elif selected_trade_type == "Profit": display_trade_type_text = process_persian_text_for_matplotlib("سودده")
+        elif selected_trade_type == "Loss": display_trade_type_text = process_persian_text_for_matplotlib("زیان‌ده")
+        elif selected_trade_type == "RF": display_trade_type_text = process_persian_text_for_matplotlib("ریسک فری")
+
+        ctk.CTkButton(inner_trade_type_buttons_frame,
+                        text=display_trade_type_text,
+                        font=("Vazirmatn", 11, "bold"),
+                        fg_color=button_category_colors["trade_type"],
+                        text_color=button_text_color,
+                        hover_color=button_category_colors["trade_type"],
+                        corner_radius=15, width=80, height=25).pack(side="right", padx=2)
+        current_row += 1
+
+        # --- Errors ---
+        error_label = ctk.CTkLabel(self.summary_table_frame, text=process_persian_text_for_matplotlib('اشتباهات:'),
+                                   font=("Vazirmatn", 12), text_color="#424242", anchor='e')
+        error_label.grid(row=current_row, column=1, sticky='e', padx=2, pady=1)
+
+        error_value_frame = ctk.CTkFrame(self.summary_table_frame, fg_color="transparent")
+        error_value_frame.grid(row=current_row, column=0, sticky='ew', padx=2, pady=1)
+
+        inner_error_buttons_frame = ctk.CTkFrame(error_value_frame, fg_color="transparent")
+        inner_error_buttons_frame.pack(side="right", anchor="e")
 
         selected_errors = all_filters_data['errors']
-        if isinstance(selected_errors, list) and selected_errors:
-            summary_data.append((process_persian_text_for_matplotlib('اشتباهات:'), process_persian_text_for_matplotlib(', '.join(selected_errors))))
+        if selected_errors == "همه خطاها":
+            ctk.CTkButton(inner_error_buttons_frame,
+                            text=process_persian_text_for_matplotlib('همه خطاها'),
+                            font=("Vazirmatn", 11, "bold"),
+                            fg_color=button_category_colors["errors"],
+                            text_color=button_text_color,
+                            hover_color=button_category_colors["errors"],
+                            corner_radius=15, width=90, height=25).pack(side="right", padx=2)
+        elif isinstance(selected_errors, list) and selected_errors:
+            displayed_count = 0
+            for error_text in selected_errors:
+                if displayed_count < summary_display_limit:
+                    ctk.CTkButton(inner_error_buttons_frame,
+                                    text=process_persian_text_for_matplotlib(error_text),
+                                    font=("Vazirmatn", 11, "bold"),
+                                    fg_color=button_category_colors["errors"],
+                                    text_color=button_text_color,
+                                    hover_color=button_category_colors["errors"],
+                                    corner_radius=15, width=80, height=25).pack(side="right", padx=2)
+                    displayed_count += 1
+                else:
+                    ctk.CTkLabel(inner_error_buttons_frame,
+                                 text=process_persian_text_for_matplotlib(f"و... ({len(selected_errors) - displayed_count} مورد دیگر)"),
+                                 font=("Vazirmatn", 11), text_color=button_text_color).pack(side="right", padx=2)
+                    break
         else:
-            summary_data.append((process_persian_text_for_matplotlib('اشتباهات:'), process_persian_text_for_matplotlib(selected_errors)))
+            ctk.CTkButton(inner_error_buttons_frame,
+                            text=process_persian_text_for_matplotlib('هیچکدام'),
+                            font=("Vazirmatn", 11, "bold"),
+                            fg_color=button_category_colors["errors"],
+                            text_color=button_text_color,
+                            hover_color=button_category_colors["errors"],
+                            corner_radius=15, width=80, height=25).pack(side="right", padx=2)
+        current_row += 1
+
+        # --- Hourly Filter ---
+        hourly_label = ctk.CTkLabel(self.summary_table_frame, text=process_persian_text_for_matplotlib('ساعات روز:'),
+                                    font=("Vazirmatn", 12), text_color="#424242", anchor='e')
+        hourly_label.grid(row=current_row, column=1, sticky='e', padx=2, pady=1)
+
+        hourly_value_frame = ctk.CTkFrame(self.summary_table_frame, fg_color="transparent")
+        hourly_value_frame.grid(row=current_row, column=0, sticky='ew', padx=2, pady=1)
+
+        inner_hourly_buttons_frame = ctk.CTkFrame(hourly_value_frame, fg_color="transparent")
+        inner_hourly_buttons_frame.pack(side="right", anchor="e")
 
         hourly_selection = all_filters_data['hourly']
-        hourly_summary_text = ""
+        hourly_summary_elements = []
+
         if hourly_selection["mode"] == "full_session":
-            hourly_summary_text = process_persian_text_for_matplotlib("سشن کامل")
+            hourly_summary_elements.append(process_persian_text_for_matplotlib("سشن کامل"))
+            # Optionally add session names if not "همه"
             if isinstance(all_filters_data['sessions'], list) and all_filters_data['sessions']:
                 user_tz = db_manager.get_default_timezone()
                 all_session_details = db_manager.get_session_times_with_display_utc(user_tz)
@@ -446,16 +719,25 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                         session_display_name = session_filter_instance.session_names_map.get(key, key.capitalize())
                         display_sessions_texts.append(f"{session_display_name} ({details['start_display']} - {details['end_display']})")
                 if display_sessions_texts:
-                    hourly_summary_text += f" ({process_persian_text_for_matplotlib(', '.join(display_sessions_texts))})"
+                    hourly_summary_elements.append(process_persian_text_for_matplotlib(", ".join(display_sessions_texts)))
             elif all_filters_data['sessions'] == "همه":
-                hourly_summary_text += f" ({process_persian_text_for_matplotlib('همه سشن‌ها')})"
-            else:
-                hourly_summary_text += f" ({process_persian_text_for_matplotlib('هیچ سشنی انتخاب نشده است')})"
+                hourly_summary_elements.append(process_persian_text_for_matplotlib("همه سشن‌ها"))
 
+            ctk.CTkButton(inner_hourly_buttons_frame,
+                            text=process_persian_text_for_matplotlib(" ".join(hourly_summary_elements)),
+                            font=("Vazirmatn", 11, "bold"),
+                            fg_color=button_category_colors["hourly"],
+                            text_color=button_text_color,
+                            hover_color=button_category_colors["hourly"],
+                            corner_radius=15, width=150, height=25).pack(side="right", padx=2)
 
         elif hourly_selection["mode"] == "session_segmentation":
             segments_data = hourly_selection.get("segments")
             segment_count = hourly_selection.get("segment_count")
+
+            hourly_summary_elements.append(process_persian_text_for_matplotlib("تفکیک سشن"))
+            if segment_count:
+                hourly_summary_elements.append(process_persian_text_for_matplotlib(f"({segment_count} قسمت)"))
 
             if segments_data and isinstance(segments_data, list):
                 session_segments_map = {}
@@ -463,25 +745,41 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                 user_tz = db_manager.get_default_timezone()
                 all_session_details = db_manager.get_session_times_with_display_utc(user_tz)
 
-
                 for seg in segments_data:
                     s_key = seg.get("session_key")
                     if s_key not in session_segments_map:
                         session_segments_map[s_key] = []
                     session_segments_map[s_key].append(f"{seg['start']}-{seg['end']}")
 
-                segmented_parts = []
+                displayed_count = 0
                 for s_key, times in session_segments_map.items():
                     session_name = session_filter_instance.session_names_map.get(s_key, s_key.capitalize())
-                    segmented_parts.append(f"{session_name}: ({process_persian_text_for_matplotlib(', ').join(times)})")
-
-                hourly_summary_text = process_persian_text_for_matplotlib("تفکیک سشن")
-                if segment_count:
-                    hourly_summary_text += f" ({segment_count} قسمت): "
-                hourly_summary_text += process_persian_text_for_matplotlib('\n').join(segmented_parts)
+                    # Display each segment part as a button if needed, or combine them
+                    for t_str in times:
+                        if displayed_count < summary_display_limit:
+                            ctk.CTkButton(inner_hourly_buttons_frame,
+                                            text=process_persian_text_for_matplotlib(f"{session_name}: {t_str}"),
+                                            font=("Vazirmatn", 11, "bold"),
+                                            fg_color=button_category_colors["hourly"],
+                                            text_color=button_text_color,
+                                            hover_color=button_category_colors["hourly"],
+                                            corner_radius=15, width=150, height=25).pack(side="right", padx=2)
+                            displayed_count += 1
+                        else:
+                            ctk.CTkLabel(inner_hourly_buttons_frame,
+                                         text=process_persian_text_for_matplotlib(f"و... ({len(segments_data) - displayed_count} مورد دیگر)"),
+                                         font=("Vazirmatn", 11), text_color=button_text_color).pack(side="right", padx=2)
+                            break
+                    if displayed_count >= summary_display_limit:
+                        break
             else:
-                hourly_summary_text = process_persian_text_for_matplotlib(f"تفکیک سشن ({segment_count} قسمت) - بازه‌ای انتخاب نشده است.")
-
+                ctk.CTkButton(inner_hourly_buttons_frame,
+                                text=process_persian_text_for_matplotlib(f"تفکیک سشن ({segment_count} قسمت) - بازه‌ای انتخاب نشده است."),
+                                font=("Vazirmatn", 11, "bold"),
+                                fg_color=button_category_colors["hourly"],
+                                text_color=button_text_color,
+                                hover_color=button_category_colors["hourly"],
+                                corner_radius=15, width=250, height=25).pack(side="right", padx=2)
 
         elif hourly_selection["mode"] == "custom_hour_minute":
             selected_intervals = hourly_selection.get("custom_intervals", [])
@@ -493,26 +791,47 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                 15: process_persian_text_for_matplotlib("۱۵ دقیقه‌ای")
             }
             granularity_text = granularity_display_name_map.get(granularity_value, process_persian_text_for_matplotlib("ناشناس"))
+            
+            # Combine granularity with initial text
+            ctk.CTkButton(inner_hourly_buttons_frame,
+                            text=process_persian_text_for_matplotlib(f"تفکیک ساعت و دقیقه ({granularity_text})"),
+                            font=("Vazirmatn", 11, "bold"),
+                            fg_color=button_category_colors["hourly"],
+                            text_color=button_text_color,
+                            hover_color=button_category_colors["hourly"],
+                            corner_radius=15, width=200, height=25).pack(side="right", padx=2)
 
-            if selected_intervals:
-                display_intervals = [f"{i['start']}-{i['end']}" for i in selected_intervals[:5]]
-                more_text = f"... ({len(selected_intervals) - 5} مورد بیشتر)" if len(selected_intervals) > 5 else ""
-                hourly_summary_text = process_persian_text_for_matplotlib(f"تفکیک ساعت و دقیقه ({granularity_text}):\n") + \
-                                      process_persian_text_for_matplotlib(", ").join(display_intervals) + \
-                                      process_persian_text_for_matplotlib(more_text)
-            else:
-                hourly_summary_text = process_persian_text_for_matplotlib(f"تفکیک ساعت و دقیقه ({granularity_text}): هیچ بازه‌ای انتخاب نشده است.")
+            displayed_count = 0
+            for i, interval in enumerate(selected_intervals):
+                if displayed_count < summary_display_limit:
+                    ctk.CTkButton(inner_hourly_buttons_frame,
+                                    text=process_persian_text_for_matplotlib(f"{interval['start']}-{interval['end']}"),
+                                    font=("Vazirmatn", 11, "bold"),
+                                    fg_color=button_category_colors["hourly"],
+                                    text_color=button_text_color,
+                                    hover_color=button_category_colors["hourly"],
+                                    corner_radius=15, width=100, height=25).pack(side="right", padx=2)
+                    displayed_count += 1
+                else:
+                    ctk.CTkLabel(inner_hourly_buttons_frame,
+                                 text=process_persian_text_for_matplotlib(f"و... ({len(selected_intervals) - displayed_count} مورد دیگر)"),
+                                 font=("Vazirmatn", 11), text_color=button_text_color).pack(side="right", padx=2)
+                    break
+            
+            if not selected_intervals:
+                 ctk.CTkButton(inner_hourly_buttons_frame,
+                                text=process_persian_text_for_matplotlib("هیچ بازه‌ای انتخاب نشده است."),
+                                font=("Vazirmatn", 11, "bold"),
+                                fg_color=button_category_colors["hourly"],
+                                text_color=button_text_color,
+                                hover_color=button_category_colors["hourly"],
+                                corner_radius=15, width=180, height=25).pack(side="right", padx=2)
+        
+        current_row += 1
+        
+        # Ensure the layout is updated after adding buttons
+        self.summary_table_frame.update_idletasks()
 
-        summary_data.append((process_persian_text_for_matplotlib('ساعات روز:'), hourly_summary_text))
-
-        for r, (caption, value) in enumerate(summary_data):
-            caption_label = ctk.CTkLabel(self.summary_table_frame, text=caption,
-                                         font=("Vazirmatn", 12), text_color="#424242", anchor='e')
-            caption_label.grid(row=r, column=1, sticky='e', padx=2, pady=1)
-
-            value_label = ctk.CTkLabel(self.summary_table_frame, text=value,
-                                       font=("Vazirmatn", 12, "bold"), text_color="#212121", anchor='e', wraplength=int(self.winfo_width() * 0.2))
-            value_label.grid(row=r, column=0, sticky='e', padx=2, pady=1)
 
     def _generate_report(self):
         """
@@ -568,7 +887,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
             report_summary_text += f"{key}: {value}\n"
 
         # Update the filler_label to show report content summary
-        self.filler_label.configure(text=process_persian_text_for_matplotlib(report_summary_text))
+        # این قسمت دیگر وجود ندارد: self.filler_label.configure(text=process_persian_text_for_matplotlib(report_summary_text))
         messagebox.showinfo("Report Generated", process_persian_text_for_matplotlib("گزارش با فیلترهای انتخابی تولید شد. (جزئیات در کنسول)."))
         print("Generated Report with filters:", filters)
 
@@ -736,7 +1055,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
             filters_data.get("date_range", {}).get("end_date", datetime.now().strftime('%Y-%m-%d')),
             filters_data.get("date_range", {}).get("preset", "custom")
         )
-        self.filter_frames["instruments"].set_selection(filters_data.get("instruments", "همه"))
+        self.filter_frames["instruments"].set_selection(filters_data.get("instruments", [])) # Changed default to empty list
         self.filter_frames["sessions"].set_selection(filters_data.get("sessions", "همه"))
         self.filter_frames["trade_type"].set_selection(filters_data.get("trade_type", "همه"))
         self.filter_frames["errors"].set_selection(filters_data.get("errors", "همه خطاها"))
@@ -1003,5 +1322,7 @@ if __name__ == "__main__":
     root_test.withdraw()
 
     mock_open_windows = []
-    show_report_selection_window(root_test, mock_open_windows)
+    # Replace this with direct instance creation for testing purposes
+    # report_selection_window.ReportSelectionWindow(root_test, mock_open_windows)
+    app = ReportSelectionWindow(root_test, mock_open_windows)
     root_test.mainloop()

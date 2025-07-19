@@ -10,10 +10,10 @@ class SessionFilterFrame(ctk.CTkFrame):
         super().__init__(master, fg_color=fg_color, **kwargs)
         self.on_change_callback = on_change_callback
         self.session_names_map = { # Display names for sessions
-            'ny': 'نیویورک',
-            'sydney': 'سیدنی',
-            'tokyo': 'توکیو',
-            'london': 'لندن'
+            'ny': 'Newyork',
+            'sydney': 'Sydney',
+            'tokyo': 'Tokyo',
+            'london': 'London'
         }
         self.session_vars = {} # To hold BooleanVar for each session
         self.all_sessions_var = ctk.BooleanVar(value=True) # "همه" initially selected
