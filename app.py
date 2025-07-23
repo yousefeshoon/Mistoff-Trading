@@ -17,8 +17,6 @@ from error_widget import show_error_frequency_widget
 from tkinter import simpledialog
 import settings_manager 
 import report_selection_window 
-#import hourly_analysis_report 
-#import matplotlib_persian_config 
 
 db_manager.migrate_database()
 

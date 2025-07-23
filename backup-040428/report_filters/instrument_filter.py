@@ -12,7 +12,7 @@ class InstrumentFilterFrame(ctk.CTkFrame):
         self.on_change_callback = on_change_callback
         self.symbols = []
         self.selected_symbols_vars = {}
-        self.all_symbols_var = ctk.BooleanVar(value=False) # پیش فرض: هیچکدام انتخاب نشده - تغییر کرد
+        self.all_symbols_var = ctk.BooleanVar(value=False) # پیش فرض: هیچکدام انتخاب نشده
 
         self.grid_columnconfigure(0, weight=1)
 
@@ -35,11 +35,14 @@ class InstrumentFilterFrame(ctk.CTkFrame):
         self.all_checkbox.grid(row=0, column=0, sticky="e", padx=10, pady=5)
 
 
-    def reload_symbols(self): # date_range_selection parameter removed
+    def reload_symbols(self, date_range_selection):
         """
-        Reloads symbols based on all available symbols.
-        This function is called by the main report window.
+        Reloads symbols based on the provided date range.
+        This function is called by the main report window when date filter changes.
         """
+        start_date = date_range_selection["start_date"]
+        end_date = date_range_selection["end_date"]
+
         # Clear previous checkboxes, keeping the "همه" checkbox intact
         for widget in self.checkbox_container_frame.winfo_children():
             if widget != self.all_checkbox:
@@ -47,28 +50,28 @@ class InstrumentFilterFrame(ctk.CTkFrame):
         
         # مهم: قبل از لود کردن نمادهای جدید، وضعیت انتخاب‌های قبلی رو ذخیره کن
         previously_selected = self.get_selection() 
-        
-        self.symbols = db_manager.get_unique_symbols() # No date range parameters
+        if previously_selected == "همه":
+            previously_selected = list(self.selected_symbols_vars.keys()) # Convert "همه" to actual list of currently displayed symbols
+
+        self.symbols = db_manager.get_unique_symbols(start_date=start_date, end_date=end_date)
         self.selected_symbols_vars = {}
 
         if not self.symbols:
-            no_symbols_label = ctk.CTkLabel(self.checkbox_container_frame, text=process_persian_text_for_matplotlib("هیچ نمادی یافت نشد."), font=("Vazirmatn", 10), text_color="gray50")
+            no_symbols_label = ctk.CTkLabel(self.checkbox_container_frame, text=process_persian_text_for_matplotlib("هیچ نمادی در بازه انتخابی یافت نشد."), font=("Vazirmatn", 10), text_color="gray50")
             no_symbols_label.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
             self.all_checkbox.configure(state="disabled")
             self.all_symbols_var.set(False)
-            # If no symbols are found, ensure the selection reflects an empty list
             if self.on_change_callback: # اگر نمادی نیست، خلاصه رو آپدیت کن
                 self.on_change_callback()
             return
 
-        self.all_checkbox.configure(state="normal")
+        self.all_checkbox.configure(state="normal") # در صورت وجود نماد، چک‌باکس "همه" باید فعال باشه
 
-        all_selected_after_reload = True
+        all_selected_after_reload = True # فرض کن همه انتخاب شدن، بعد اگر یکی نبود، false کن
         # Re-create checkboxes for each symbol
         for i, symbol in enumerate(sorted(self.symbols)):
-            # Check if this symbol was previously selected, otherwise default to False (not selected)
-            # When resetting, previously_selected will be [], so all will be False
-            is_checked = (previously_selected == "همه") or (isinstance(previously_selected, list) and symbol in previously_selected)
+            # اگر قبلا انتخاب شده بود، دوباره تیک بزن
+            is_checked = (symbol in previously_selected) if isinstance(previously_selected, list) else False
             var = ctk.BooleanVar(value=is_checked) 
             self.selected_symbols_vars[symbol] = var
             checkbox = ctk.CTkCheckBox(self.checkbox_container_frame,
@@ -85,14 +88,10 @@ class InstrumentFilterFrame(ctk.CTkFrame):
                 all_selected_after_reload = False
 
         # "همه" باید بر اساس وضعیت واقعی چک‌باکس‌های تکی تنظیم بشه
-        # If previously_selected was "همه" AND all current symbols are checked, then "همه" should remain checked.
-        # Otherwise, if even one symbol is not checked, or if previously_selected was a specific list/empty list,
-        # then "همه" should be unchecked.
-        if previously_selected == "همه" and all_selected_after_reload:
-            self.all_symbols_var.set(True)
-        else:
-            self.all_symbols_var.set(False)
+        self.all_symbols_var.set(all_selected_after_reload)
 
+        # Trigger summary update if callback exists
+        # این فراخوانی توسط ReportSelectionWindow در _on_filter_changed مدیریت میشه
 
     def _toggle_all_symbols(self):
         is_all_selected = self.all_symbols_var.get()
@@ -118,23 +117,26 @@ class InstrumentFilterFrame(ctk.CTkFrame):
             return selected if selected else [] # اگر هیچکدام انتخاب نشده، لیست خالی برگردون
 
     def set_selection(self, selected_list):
-        # This function is used when loading a template or resetting.
-        # It must ensure that self.symbols are up-to-date and checkboxes are created before setting.
-        # This function is typically called after reload_symbols.
+        # این تابع هنگام بارگذاری قالب یا ریست کردن استفاده میشه
+        # بنابراین باید چک‌باکس‌ها رو به درستی تنظیم کنه
+        # ابتدا مطمئن شو که self.symbols بروز و چک‌باکس‌ها ساخته شده‌اند
+        # این تابع به طور معمول بعد از reload_symbols صدا زده میشه
         
         if selected_list == "همه":
             self.all_symbols_var.set(True)
             for var in self.selected_symbols_vars.values():
                 var.set(True)
         else:
-            # Set 'All' checkbox to False by default when setting a specific list or empty list
-            self.all_symbols_var.set(False) 
+            self.all_symbols_var.set(False) # چون 'همه' نیست
             for symbol, var in self.selected_symbols_vars.items():
                 var.set(symbol in selected_list)
             
-            # If all currently available symbols are checked after setting, then 'All' checkbox can be set to True.
-            # This handles cases where a subset was saved, but now it represents all available.
-            if selected_list and all(var.get() for var in self.selected_symbols_vars.values()):
+            # اگر selected_list خالی باشه، all_symbols_var باید False باشه
+            if not selected_list:
+                self.all_symbols_var.set(False)
+            
+            # اگر همه نمادهای موجود در selected_symbols_vars تیک خورده باشند، all_symbols_var را True کن
+            if all(var.get() for var in self.selected_symbols_vars.values()) and self.selected_symbols_vars:
                 self.all_symbols_var.set(True)
 
-        # No need to call on_change_callback here directly, as it will be called by ReportSelectionWindow.
+        # No need to call on_change_callback here directly.

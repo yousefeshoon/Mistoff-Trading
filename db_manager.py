@@ -6,7 +6,7 @@ import os
 from decimal import Decimal, InvalidOperation
 import pytz
 from datetime import datetime
-import json # اضافه شده برای کار با JSON
+import json
 
 def get_resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
@@ -19,7 +19,7 @@ DATABASE_NAME = "trades.db"
 # تمام بلاک های مهاجرتی قبلی را در یک شمای نهایی جمع بندی کرده ایم.
 # برای هر تغییر ساختاری جدید در آینده، باید این ورژن را افزایش داده
 # و یک بلاک مهاجرت جدید (با ALTER TABLE) اضافه کنیم.
-DATABASE_SCHEMA_VERSION = 16 # <--- افزایش ورژن دیتابیس
+DATABASE_SCHEMA_VERSION = 16 # <--- افزایش ورژن دیتابیس (اینجا تغییری نکرد)
 
 def _get_db_version(cursor):
     """
@@ -114,10 +114,8 @@ def migrate_database():
             _set_db_version(conn, cursor, 14)
             current_db_version = 14
         
-        # <<< بلاک مهاجرت جدید برای سشن‌های معاملاتی (ورژن 15) - با مقادیر اصلاح شده
         if current_db_version < 15:
             print("Migrating to version 15: Adding default trading session times in UTC (adjusted for EDT display).")
-            # مقادیر پیش‌فرض سشن‌ها بر اساس تبدیل از ET (با فرض EDT) به UTC
             cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('ny_session_start_utc', '13:30'))
             cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ('ny_session_end_utc', '20:00'))
             
@@ -132,9 +130,7 @@ def migrate_database():
             
             _set_db_version(conn, cursor, 15)
             current_db_version = 15
-        # >>>
 
-        # <<< بلاک مهاجرت جدید برای قالب‌های گزارش (ورژن 16)
         if current_db_version < 16:
             print("Migrating to version 16: Creating 'report_templates' table.")
             cursor.execute("""
@@ -148,8 +144,6 @@ def migrate_database():
             """)
             _set_db_version(conn, cursor, 16)
             current_db_version = 16
-        # >>>
-
         conn.commit()
         print("Database migration complete. DB is up to date.")
     except sqlite3.Error as e:
@@ -491,11 +485,7 @@ def get_errors_for_export():
     finally:
         conn.close()
 
-# db_manager.py
-
-# ... (کدهای قبلی)
-
-def get_trades_for_hourly_analysis(start_date_str, end_date_str, trade_type_filter): # <<< حذف 'error_names_filter' از اینجا
+def get_trades_for_hourly_analysis(start_date_str, end_date_str, trade_type_filter): # No change needed here for date removal from ReportSelectionWindow. This function might still be used by other parts of the application or for future features that do require date filtering.
     """
     تریدهای فیلتر شده را برای آنالیز ساعتی برمی‌گرداند.
     تاریخ‌ها را به صورت UTC و زمان‌ها را نیز به همان شکل ذخیره شده (UTC) برمی‌گرداند.
@@ -512,22 +502,17 @@ def get_trades_for_hourly_analysis(start_date_str, end_date_str, trade_type_filt
             query += " AND profit = ?"
             params.append(trade_type_filter)
         
-        # بخش مربوط به فیلتر خطا که قبلا کامنت بود، حالا کاملا حذف شده یا هیچ کاری نمی‌کند
-        # چون دیگر آرگومان error_names_filter را دریافت نمی‌کند.
-        
         cursor.execute(query + " ORDER BY date ASC, time ASC", params)
         rows = cursor.fetchall()
         for row in rows:
             processed_row = dict(row)
             
-            # فیلدهای عددی را به Decimal تبدیل می‌کنیم
             for col in ['entry', 'exit', 'size', 'actual_profit_amount']:
                 if col in processed_row and processed_row[col] is not None and processed_row[col] != '':
                     try:
                         processed_row[col] = Decimal(processed_row[col])
                     except InvalidOperation:
                         processed_row[col] = None 
-
             trades_list.append(processed_row)
             
         return trades_list
@@ -536,8 +521,6 @@ def get_trades_for_hourly_analysis(start_date_str, end_date_str, trade_type_filt
         return []
     finally:
         conn.close()
-
-# ... (بقیه کدهای db_manager.py)
 
 def import_errors_by_position_id(error_data_list):
     """
@@ -681,7 +664,6 @@ def recalculate_trade_profits():
     finally:
         conn.close()
 
-# توابع جدید برای مدیریت روزهای کاری
 def get_working_days():
     """
     روزهای کاری را به صورت لیستی از اعداد (0=دوشنبه تا 6=یکشنبه) از تنظیمات برمی‌گرداند.
@@ -702,19 +684,18 @@ def set_working_days(days_list):
     Returns:
         bool: True اگر عملیات موفقیت‌آمیز باشد، False در غیر این صورت.
     """
-    working_days_str = ','.join(map(str, sorted(list(set(days_list))))) # حذف تکراری و مرتب‌سازی
+    working_days_str = ','.join(map(str, sorted(list(set(days_list)))))
     return set_setting('working_days', working_days_str)
 
-# توابع جدید برای مدیریت ساعت‌های سشن‌های معاملاتی
 def get_session_times_utc():
     """
     ساعت‌های شروع و پایان سشن‌های معاملاتی را به فرمت HH:MM (UTC) از تنظیمات برمی‌گرداند.
     """
     sessions = {
-        'ny': {'start': get_setting('ny_session_start_utc', '13:30'), 'end': get_setting('ny_session_end_utc', '20:00')}, # Updated defaults
-        'sydney': {'start': get_setting('sydney_session_start_utc', '00:00'), 'end': get_setting('sydney_session_end_utc', '06:00')}, # Updated defaults
-        'tokyo': {'start': get_setting('tokyo_session_start_utc', '00:00'), 'end': get_setting('tokyo_session_end_utc', '06:00')}, # Updated defaults
-        'london': {'start': get_setting('london_session_start_utc', '07:00'), 'end': get_setting('london_session_end_utc', '15:30')} # Updated defaults
+        'ny': {'start': get_setting('ny_session_start_utc', '13:30'), 'end': get_setting('ny_session_end_utc', '20:00')},
+        'sydney': {'start': get_setting('sydney_session_start_utc', '00:00'), 'end': get_setting('sydney_session_end_utc', '06:00')},
+        'tokyo': {'start': get_setting('tokyo_session_start_utc', '00:00'), 'end': get_setting('tokyo_session_end_utc', '06:00')},
+        'london': {'start': get_setting('london_session_start_utc', '07:00'), 'end': get_setting('london_session_end_utc', '15:30')}
     }
     return sessions
 
@@ -737,22 +718,14 @@ def set_session_times_utc(session_data):
         print(f"Error setting session times: {e}")
         return False
 
-def get_unique_symbols(start_date=None, end_date=None):
+def get_unique_symbols(): # start_date and end_date parameters removed
     """
     لیست نمادهای (symbols) یکتا را از تریدهای ذخیره شده در دیتابیس برمی‌گرداند.
-    اگر بازه تاریخی مشخص شده باشد، نمادهای موجود در آن بازه را برمی‌گرداند.
-    Args:
-        start_date (str, optional): تاریخ شروع (YYYY-MM-DD). Defaults to None.
-        end_date (str, optional): تاریخ پایان (YYYY-MM-DD). Defaults to None.
     """
     conn, cursor = connect_db()
     try:
         query = "SELECT DISTINCT symbol FROM trades WHERE symbol IS NOT NULL AND symbol != ''"
-        params = []
-        if start_date and end_date:
-            query += " AND date BETWEEN ? AND ?"
-            params.append(start_date)
-            params.append(end_date)
+        params = [] # params list is now empty as date filters are removed
         query += " ORDER BY symbol ASC"
         
         cursor.execute(query, params)
@@ -764,7 +737,6 @@ def get_unique_symbols(start_date=None, end_date=None):
     finally:
         conn.close()
 
-# NEW FUNCTION: Get the earliest trade date
 def get_first_trade_date():
     """
     اولین تاریخ ترید ثبت شده در دیتابیس را برمی‌گرداند.
@@ -780,7 +752,6 @@ def get_first_trade_date():
     finally:
         conn.close()
 
-# NEW FUNCTION: Get session times in both UTC and user's local timezone
 def get_session_times_with_display_utc(user_timezone_name):
     """
     ساعت‌های شروع و پایان سشن‌های معاملاتی را از تنظیمات برمی‌گرداند.
@@ -794,16 +765,13 @@ def get_session_times_with_display_utc(user_timezone_name):
         start_utc_str = times['start']
         end_utc_str = times['end']
 
-        start_display_str = start_utc_str # Fallback
-        end_display_str = end_utc_str     # Fallback
+        start_display_str = start_utc_str
+        end_display_str = end_utc_str
 
         try:
             start_utc_time = datetime.strptime(start_utc_str, '%H:%M').time()
             end_utc_time = datetime.strptime(end_utc_str, '%H:%M').time()
 
-            # از یک تاریخ پایه برای تبدیل استفاده می‌کنیم تا DST به درستی اعمال شود
-            # تاریخ امروز (در UTC) را به عنوان مبنا قرار می‌دهیم و زمان‌های UTC را به آن اضافه می‌کنیم
-            # سپس به تایم زون کاربر تبدیل می‌کنیم.
             today_utc_date = datetime.utcnow().date() 
 
             start_dt_utc_naive = datetime.combine(today_utc_date, start_utc_time)
@@ -818,7 +786,6 @@ def get_session_times_with_display_utc(user_timezone_name):
             
         except ValueError as e:
             print(f"Error converting session time for display ({key}): {e}")
-            # اگر خطایی در تبدیل بود، از زمان UTC خام استفاده می‌کنیم و هشدار می‌دهیم.
             pass
         except Exception as e:
             print(f"General error converting session time for display ({key}): {e}")
@@ -832,8 +799,7 @@ def get_session_times_with_display_utc(user_timezone_name):
         }
     return sessions_with_display
 
-# NEW FUNCTION: Get unique errors based on date range and trade type
-def get_unique_errors_by_filters(start_date=None, end_date=None, trade_type_filter=None):
+def get_unique_errors_by_filters(trade_type_filter=None): # start_date and end_date parameters removed
     """
     خطاهای یکتا را بر اساس بازه تاریخی و نوع ترید برمی‌گرداند.
     """
@@ -843,9 +809,9 @@ def get_unique_errors_by_filters(start_date=None, end_date=None, trade_type_filt
         query = "SELECT errors FROM trades WHERE errors IS NOT NULL AND errors != ''"
         params = []
 
-        if start_date and end_date:
-            query += " AND date BETWEEN ? AND ?"
-            params.extend([start_date, end_date])
+        # if start_date and end_date: # This block is removed
+        #     query += " AND date BETWEEN ? AND ?"
+        #     params.extend([start_date, end_date])
         
         if trade_type_filter and trade_type_filter != "همه" and trade_type_filter != "همه انواع":
             query += " AND profit = ?"
@@ -864,7 +830,6 @@ def get_unique_errors_by_filters(start_date=None, end_date=None, trade_type_filt
     finally:
         conn.close()
 
-# --- توابع جدید برای مدیریت قالب‌های گزارش (Report Templates) ---
 def save_report_template(name, filters_data):
     """
     یک قالب گزارش جدید را ذخیره می‌کند.
@@ -880,7 +845,7 @@ def save_report_template(name, filters_data):
         cursor.execute("INSERT INTO report_templates (name, filters_json) VALUES (?, ?)", (name, filters_json))
         conn.commit()
         return True
-    except sqlite3.IntegrityError: # برای نام یکتا
+    except sqlite3.IntegrityError:
         print(f"Error: Report template with name '{name}' already exists.")
         return False
     except sqlite3.Error as e:
@@ -921,7 +886,7 @@ def get_report_template_by_id(template_id):
         result = cursor.fetchone()
         if result:
             template_data = dict(result)
-            template_data['filters_json'] = json.loads(template_data['filters_json']) # تبدیل JSON به دیکشنری
+            template_data['filters_json'] = json.loads(template_data['filters_json'])
             return template_data
         return None
     except sqlite3.Error as e:
@@ -946,7 +911,6 @@ def update_report_template(template_id, new_name, new_filters_data):
     conn, cursor = connect_db()
     try:
         new_filters_json = json.dumps(new_filters_data)
-        # بررسی تکراری بودن نام جدید (برای سایر ID ها)
         cursor.execute("SELECT COUNT(*) FROM report_templates WHERE name = ? AND id != ?", (new_name, template_id))
         if cursor.fetchone()[0] > 0:
             print(f"Error: Report template with name '{new_name}' already exists for another ID.")
@@ -959,7 +923,7 @@ def update_report_template(template_id, new_name, new_filters_data):
         """, (new_name, new_filters_json, template_id))
         conn.commit()
         return True
-    except sqlite3.IntegrityError: # این هم برای اطمینان بیشتر از یونیک بودن نام
+    except sqlite3.IntegrityError:
         print(f"Error (IntegrityError): Report template with name '{new_name}' already exists.")
         return False
     except sqlite3.Error as e:
@@ -986,9 +950,38 @@ def delete_report_template(template_id):
         return False
     finally:
         conn.close()
-# --- پایان توابع جدید ---
+
+# Helper function for time comparison (moved from hourly_filter or report)
+def _time_to_minutes(time_str):
+    """Converts 'HH:MM' string to total minutes from midnight."""
+    h, m = map(int, time_str.split(':'))
+    return h * 60 + m
+
+# Helper function for checking if a trade's time is within an interval (moved from hourly_filter or report)
+def _is_trade_in_time_interval(trade_datetime_obj, start_time_str, end_time_str):
+    """
+    Checks if a trade's time (HH:MM) falls within a given interval (HH:MM-HH:MM).
+    Handles overnight intervals.
+    Args:
+        trade_datetime_obj (datetime): The datetime object of the trade (local timezone).
+        start_time_str (str): Start time of the interval (e.g., "09:00").
+        end_time_str (str): End time of the interval (e.g., "17:00" or "03:00" for overnight).
+    Returns:
+        bool: True if trade is within interval, False otherwise.
+    """
+    trade_time_minutes = trade_datetime_obj.hour * 60 + trade_datetime_obj.minute
+    interval_start_minutes = _time_to_minutes(start_time_str)
+    interval_end_minutes = _time_to_minutes(end_time_str)
+
+    if interval_start_minutes <= interval_end_minutes:
+        # Normal interval (e.g., 09:00 - 17:00)
+        return interval_start_minutes <= trade_time_minutes < interval_end_minutes
+    else:
+        # Overnight interval (e.g., 22:00 - 04:00)
+        # Trade is in interval if it's after start (on day 1) OR before end (on day 2)
+        return trade_time_minutes >= interval_start_minutes or trade_time_minutes < interval_end_minutes
+
 
 if __name__ == '__main__':
     migrate_database()
     print("Database schema checked and migrated if necessary.")
-    

@@ -11,7 +11,7 @@ class ErrorFilterFrame(ctk.CTkFrame):
         self.on_change_callback = on_change_callback
         self.errors = [] # List of unique errors from DB based on filters
         self.selected_errors_vars = {} # Dictionary to hold BooleanVars for each error
-        self.all_errors_var = ctk.BooleanVar(value=False) # "هیچکدام" ابتدا انتخاب شده - تغییر کرد
+        self.all_errors_var = ctk.BooleanVar(value=True) # "همه" initially selected
 
         self.grid_columnconfigure(0, weight=1)
 
@@ -35,7 +35,7 @@ class ErrorFilterFrame(ctk.CTkFrame):
         self.all_checkbox.grid(row=0, column=0, sticky="e", padx=10, pady=5) # Right-aligned
 
         # Hint label for date range
-        self.date_range_hint_label = ctk.CTkLabel(self, text=process_persian_text_for_matplotlib("نمایش اشتباهات مرتبط با نوع ترید انتخابی."), # متن تغییر کرد
+        self.date_range_hint_label = ctk.CTkLabel(self, text=process_persian_text_for_matplotlib("نمایش اشتباهات مرتبط با بازه تاریخی و نوع ترید انتخابی."),
                                                   font=("Vazirmatn", 9, "italic"), text_color="gray50", anchor="e", wraplength=250)
         self.date_range_hint_label.grid(row=2, column=0, padx=5, pady=(0,5), sticky="ew")
 
@@ -45,9 +45,9 @@ class ErrorFilterFrame(ctk.CTkFrame):
         self.reload_errors(initial_load=True)
 
 
-    def reload_errors(self, trade_type_filter=None, initial_load=False): # date_range_selection parameter removed
+    def reload_errors(self, date_range_selection=None, trade_type_filter=None, initial_load=False): # Add initial_load parameter
         """
-        Reloads error options based on the provided trade type.
+        Reloads error options based on the provided date range and trade type.
         This function is called by the main report window when date/trade_type filters change.
         """
         # Clear previous checkboxes, keeping "همه"
@@ -55,18 +55,23 @@ class ErrorFilterFrame(ctk.CTkFrame):
             if widget != self.all_checkbox:
                 widget.destroy()
 
-        self.errors = db_manager.get_unique_errors_by_filters(trade_type_filter=trade_type_filter) # date_range_selection removed
+        start_date = date_range_selection.get("start_date") if date_range_selection else None
+        end_date = date_range_selection.get("end_date") if date_range_selection else None
+
+        self.errors = db_manager.get_unique_errors_by_filters(start_date, end_date, trade_type_filter) #
         
         # Reset selected errors. We will re-check based on previous selection or default to all.
         previously_selected = self.get_selection() # Get current selection before clearing checkboxes
 
         self.selected_errors_vars = {}
+        # self.all_errors_var.set(True) # Assume "همه" is checked initially for reload - this will be set based on individual checks
 
         if not self.errors:
-            no_errors_label = ctk.CTkLabel(self.checkbox_container_frame, text=process_persian_text_for_matplotlib("هیچ خطایی یافت نشد."), font=("Vazirmatn", 10), text_color="gray50") # متن تغییر کرد
-            no_errors_label.grid(row=1, column=0, sticky="e", padx=10, pady=5)
+            no_errors_label = ctk.CTkLabel(self.checkbox_container_frame, text=process_persian_text_for_matplotlib("هیچ خطایی در بازه انتخابی یافت نشد."), font=("Vazirmatn", 10), text_color="gray50")
+            no_errors_label.grid(row=1, column=0, sticky="e", padx=10, pady=5) # جهت به E تغییر یافته
             self.all_checkbox.configure(state="disabled")
             self.all_errors_var.set(False)
+            # Removed self.on_change_callback() here to prevent recursion during initial setup.
             return
 
         self.all_checkbox.configure(state="normal")
@@ -74,11 +79,12 @@ class ErrorFilterFrame(ctk.CTkFrame):
         # Create checkboxes for each error
         all_selected_after_reload = True # Flag to check if all are selected
         for i, error_text in enumerate(sorted(self.errors)):
-            # Check if this error was previously selected, otherwise default to False (not selected) for initial load
+            # Check if this error was previously selected, otherwise default to all if "همه" was active
+            # During initial load, default to all being selected (value=True in CTkBooleanVar).
             if initial_load:
-                is_checked = False # پیش فرض: هیچکدام انتخاب نشده
+                is_checked = True
             else:
-                is_checked = (previously_selected == "همه خطاها") or (isinstance(previously_selected, list) and error_text in previously_selected)
+                is_checked = (previously_selected == "همه خطاها" or (isinstance(previously_selected, list) and error_text in previously_selected))
             
             var = ctk.BooleanVar(value=is_checked)
             self.selected_errors_vars[error_text] = var
@@ -91,18 +97,15 @@ class ErrorFilterFrame(ctk.CTkFrame):
                                        checkbox_width=18, checkbox_height=18,
                                        border_color=("gray60", "gray40"),
                                        checkmark_color="white")
-            checkbox.grid(row=i + 1, column=0, sticky="e", padx=10, pady=2)
+            checkbox.grid(row=i + 1, column=0, sticky="e", padx=10, pady=2) # Right-aligned
 
             if not is_checked:
                 all_selected_after_reload = False
         
         # Set "همه" checkbox based on the state of individual checkboxes
-        # If no errors exist, it should remain unchecked. If errors exist but none are checked, it should be unchecked.
-        # If all currently available errors are checked, it should be checked.
-        if self.errors and all(var.get() for var in self.selected_errors_vars.values()):
-            self.all_errors_var.set(True)
-        else:
-            self.all_errors_var.set(False)
+        self.all_errors_var.set(all_selected_after_reload)
+
+        # Removed self.on_change_callback() here to prevent recursion during initial setup.
 
 
     def _toggle_all_errors(self):
@@ -125,8 +128,7 @@ class ErrorFilterFrame(ctk.CTkFrame):
         if self.all_errors_var.get():
             return "همه خطاها"
         else:
-            selected = [e for e, var in self.selected_errors_vars.items() if var.get()]
-            return selected if selected else [] # اگر هیچکدام انتخاب نشده، لیست خالی برگردون
+            return [e for e, var in self.selected_errors_vars.items() if var.get()]
 
     def set_selection(self, selected_list):
         if selected_list == "همه خطاها":
@@ -134,12 +136,7 @@ class ErrorFilterFrame(ctk.CTkFrame):
             for var in self.selected_errors_vars.values():
                 var.set(True)
         else:
-            # Set 'All' checkbox to False by default when setting a specific list or empty list
-            self.all_errors_var.set(False) 
+            self.all_errors_var.set(False)
             for error_text, var in self.selected_errors_vars.items():
                 var.set(error_text in selected_list)
-            
-            # If all currently available errors are checked after setting, then 'All' checkbox can be set to True.
-            if selected_list and all(var.get() for var in self.selected_errors_vars.values()):
-                self.all_errors_var.set(True)
         # No need to call on_change_callback here directly.

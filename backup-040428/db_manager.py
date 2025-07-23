@@ -6,6 +6,7 @@ import os
 from decimal import Decimal, InvalidOperation
 import pytz
 from datetime import datetime
+import json # اضافه شده برای کار با JSON
 
 def get_resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
@@ -18,7 +19,7 @@ DATABASE_NAME = "trades.db"
 # تمام بلاک های مهاجرتی قبلی را در یک شمای نهایی جمع بندی کرده ایم.
 # برای هر تغییر ساختاری جدید در آینده، باید این ورژن را افزایش داده
 # و یک بلاک مهاجرت جدید (با ALTER TABLE) اضافه کنیم.
-DATABASE_SCHEMA_VERSION = 15 
+DATABASE_SCHEMA_VERSION = 16 # <--- افزایش ورژن دیتابیس
 
 def _get_db_version(cursor):
     """
@@ -48,7 +49,7 @@ def connect_db():
 def migrate_database():
     """
     دیتابیس را به آخرین نسخه اسکیمای مورد نیاز مهاجرت می دهد.
-    اگر دیتابیس وجود نداشته باشد، با آخرین اسکیما ساخته می شود.
+    اگر دیتابیس وجود نداشته باشد, با آخرین اسکیما ساخته می شود.
     """
     conn, cursor = connect_db()
     current_db_version = _get_db_version(cursor)
@@ -131,6 +132,22 @@ def migrate_database():
             
             _set_db_version(conn, cursor, 15)
             current_db_version = 15
+        # >>>
+
+        # <<< بلاک مهاجرت جدید برای قالب‌های گزارش (ورژن 16)
+        if current_db_version < 16:
+            print("Migrating to version 16: Creating 'report_templates' table.")
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS report_templates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    filters_json TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            _set_db_version(conn, cursor, 16)
+            current_db_version = 16
         # >>>
 
         conn.commit()
@@ -286,9 +303,6 @@ def get_total_trades_count():
         cursor.execute("SELECT COUNT(*) FROM trades")
         count = cursor.fetchone()[0] or 0
         return count
-    except sqlite3.Error as e:
-        print(f"خطا در دریافت تعداد کل تریدها: {e}")
-        return 0
     finally:
         conn.close()
 
@@ -850,6 +864,131 @@ def get_unique_errors_by_filters(start_date=None, end_date=None, trade_type_filt
     finally:
         conn.close()
 
+# --- توابع جدید برای مدیریت قالب‌های گزارش (Report Templates) ---
+def save_report_template(name, filters_data):
+    """
+    یک قالب گزارش جدید را ذخیره می‌کند.
+    Args:
+        name (str): نام یکتای قالب.
+        filters_data (dict): دیکشنری حاوی تمام فیلترهای انتخاب شده.
+    Returns:
+        bool: True در صورت موفقیت، False در غیر این صورت (مثلاً نام تکراری).
+    """
+    conn, cursor = connect_db()
+    try:
+        filters_json = json.dumps(filters_data)
+        cursor.execute("INSERT INTO report_templates (name, filters_json) VALUES (?, ?)", (name, filters_json))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError: # برای نام یکتا
+        print(f"Error: Report template with name '{name}' already exists.")
+        return False
+    except sqlite3.Error as e:
+        print(f"Error saving report template: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_report_templates():
+    """
+    لیست همه قالب‌های گزارش ذخیره شده (ID و نام) را برمی‌گرداند.
+    Returns:
+        list: لیستی از دیکشنری‌ها، هر دیکشنری شامل 'id' و 'name'.
+    """
+    conn, cursor = connect_db()
+    templates = []
+    try:
+        cursor.execute("SELECT id, name FROM report_templates ORDER BY name ASC")
+        rows = cursor.fetchall()
+        for row in rows:
+            templates.append(dict(row))
+        return templates
+    except sqlite3.Error as e:
+        print(f"Error getting report templates: {e}")
+        return []
+    finally:
+        conn.close()
+
+def get_report_template_by_id(template_id):
+    """
+    جزئیات یک قالب گزارش خاص را بر اساس ID آن برمی‌گرداند.
+    Returns:
+        dict: دیکشنری شامل 'id', 'name', 'filters_json' یا None.
+    """
+    conn, cursor = connect_db()
+    try:
+        cursor.execute("SELECT id, name, filters_json FROM report_templates WHERE id = ?", (template_id,))
+        result = cursor.fetchone()
+        if result:
+            template_data = dict(result)
+            template_data['filters_json'] = json.loads(template_data['filters_json']) # تبدیل JSON به دیکشنری
+            return template_data
+        return None
+    except sqlite3.Error as e:
+        print(f"Error getting report template by ID: {e}")
+        return None
+    except json.JSONDecodeError as e:
+        print(f"Error decoding filters_json for template ID {template_id}: {e}")
+        return None
+    finally:
+        conn.close()
+
+def update_report_template(template_id, new_name, new_filters_data):
+    """
+    یک قالب گزارش موجود را به‌روزرسانی می‌کند.
+    Args:
+        template_id (int): ID قالب برای به‌روزرسانی.
+        new_name (str): نام جدید قالب.
+        new_filters_data (dict): دیکشنری جدید حاوی فیلترها.
+    Returns:
+        bool: True در صورت موفقیت، False در غیر این صورت (مثلاً نام تکراری).
+    """
+    conn, cursor = connect_db()
+    try:
+        new_filters_json = json.dumps(new_filters_data)
+        # بررسی تکراری بودن نام جدید (برای سایر ID ها)
+        cursor.execute("SELECT COUNT(*) FROM report_templates WHERE name = ? AND id != ?", (new_name, template_id))
+        if cursor.fetchone()[0] > 0:
+            print(f"Error: Report template with name '{new_name}' already exists for another ID.")
+            return False
+
+        cursor.execute("""
+            UPDATE report_templates
+            SET name = ?, filters_json = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (new_name, new_filters_json, template_id))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError: # این هم برای اطمینان بیشتر از یونیک بودن نام
+        print(f"Error (IntegrityError): Report template with name '{new_name}' already exists.")
+        return False
+    except sqlite3.Error as e:
+        print(f"Error updating report template: {e}")
+        return False
+    finally:
+        conn.close()
+
+def delete_report_template(template_id):
+    """
+    یک قالب گزارش را حذف می‌کند.
+    Args:
+        template_id (int): ID قالب برای حذف.
+    Returns:
+        bool: True در صورت موفقیت، False در غیر این صورت.
+    """
+    conn, cursor = connect_db()
+    try:
+        cursor.execute("DELETE FROM report_templates WHERE id = ?", (template_id,))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Error deleting report template: {e}")
+        return False
+    finally:
+        conn.close()
+# --- پایان توابع جدید ---
+
 if __name__ == '__main__':
     migrate_database()
     print("Database schema checked and migrated if necessary.")
+    

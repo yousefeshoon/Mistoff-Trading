@@ -16,9 +16,7 @@ class SessionFilterFrame(ctk.CTkFrame):
             'london': 'London'
         }
         self.session_vars = {} # To hold BooleanVar for each session
-        # Initial value for all_sessions_var should be False by default.
-        # It will be set correctly by _load_weekdays based on the actual selection.
-        self.all_sessions_var = ctk.BooleanVar(value=False) 
+        self.all_sessions_var = ctk.BooleanVar(value=True) # "همه" initially selected
 
         self.grid_columnconfigure(0, weight=1)
 
@@ -65,19 +63,20 @@ class SessionFilterFrame(ctk.CTkFrame):
             if widget != self.all_checkbox:
                 widget.destroy()
 
-        # Get current selection before clearing checkboxes
-        # This is important for non-initial loads to preserve user's choice
-        previously_selected = self.get_selection() 
+        # از تابع جدید db_manager برای دریافت زمان‌های نمایش استفاده می‌کنیم
+        current_session_times = db_manager.get_session_times_with_display_utc(user_tz_name)
+        
+        # Reset selected sessions. We will re-check based on previous selection or default to all.
+        previously_selected = self.get_selection() # Get current selection before clearing checkboxes
         
         self.session_vars = {}
-
-        current_session_times = db_manager.get_session_times_with_display_utc(user_tz_name)
 
         if not current_session_times:
             no_sessions_label = ctk.CTkLabel(self.checkbox_container_frame, text=process_persian_text_for_matplotlib("سشنی در تنظیمات یافت نشد."), font=("Vazirmatn", 10), text_color="gray50")
             no_sessions_label.grid(row=1, column=0, sticky="e", padx=10, pady=5)
             self.all_checkbox.configure(state="disabled")
             self.all_sessions_var.set(False)
+            # Do NOT trigger on_change_callback here.
             return
 
         self.all_checkbox.configure(state="normal")
@@ -89,12 +88,13 @@ class SessionFilterFrame(ctk.CTkFrame):
             session_display_name = self.session_names_map.get(key, key.capitalize())
             display_text = f"{session_display_name} ({times['start_display']} - {times['end_display']} به وقت محلی)"
             
-            # Logic for initial selection (Newyork by default)
+            # Check if this session was previously selected, otherwise default to all if "همه" was active
+            # During initial load, default to all being selected (value=True in CTkBooleanVar).
+            # Otherwise, use previously_selected or all_sessions_var.get()
             if initial_load:
-                is_checked = (key == 'ny') # Default: only New York is selected on initial load
+                is_checked = True
             else:
-                # If not initial load, try to restore previous selection
-                is_checked = (previously_selected == "همه") or (isinstance(previously_selected, list) and key in previously_selected)
+                is_checked = (previously_selected == "همه" or (isinstance(previously_selected, list) and key in previously_selected))
             
             var = ctk.BooleanVar(value=is_checked)
             self.session_vars[key] = var
@@ -113,11 +113,11 @@ class SessionFilterFrame(ctk.CTkFrame):
             if not is_checked:
                 all_selected_after_reload = False
         
-        # Set "همه" checkbox based on the state of individual checkboxes and initial_load logic
-        if current_session_times and all(var.get() for var in self.session_vars.values()):
-            self.all_sessions_var.set(True)
-        else:
-            self.all_sessions_var.set(False)
+        # Set "همه" checkbox based on the state of individual checkboxes
+        self.all_sessions_var.set(all_selected_after_reload)
+
+        # Do NOT trigger on_change_callback here.
+        # It will be triggered by ReportSelectionWindow after all filters are initialized.
 
 
     def _toggle_all_sessions(self):
@@ -141,29 +141,15 @@ class SessionFilterFrame(ctk.CTkFrame):
             return "همه"
         else:
             # فقط کلیدهای سشن انتخاب شده را برمی‌گرداند (مثل 'ny', 'london')
-            selected = [s for s, var in self.session_vars.items() if var.get()]
-            return selected if selected else [] # اگر هیچکدام انتخاب نشده، لیست خالی برگردون
+            return [s for s, var in self.session_vars.items() if var.get()]
 
     def set_selection(self, selected_list):
-        # This function is called when loading a template or resetting.
-        # It sets the checkboxes according to selected_list.
-        
-        # If selected_list is empty (e.g., from a reset command), default to 'ny'
-        if not selected_list:
-            selected_list = ['ny']
-            
         if selected_list == "همه":
             self.all_sessions_var.set(True)
             for var in self.session_vars.values():
                 var.set(True)
         else:
-            self.all_sessions_var.set(False) # Default to false for specific list
+            self.all_sessions_var.set(False)
             for session_key, var in self.session_vars.items():
                 var.set(session_key in selected_list)
-            
-            # If all individual sessions are checked after setting, and the list is not empty,
-            # then 'All' should be True.
-            current_session_times = db_manager.get_session_times_with_display_utc(db_manager.get_default_timezone()) # Re-fetch for accurate count
-            if selected_list and current_session_times and all(var.get() for var in self.session_vars.values()):
-                 self.all_sessions_var.set(True)
         # No need to call on_change_callback here directly.

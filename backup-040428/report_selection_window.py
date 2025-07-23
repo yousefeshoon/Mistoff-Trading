@@ -10,6 +10,7 @@ from tkinter import ttk
 
 # Import all modular filter frames
 from report_filters import (
+    DateRangeFilterFrame,
     InstrumentFilterFrame,
     SessionFilterFrame,
     TradeTypeFilterFrame,
@@ -17,12 +18,11 @@ from report_filters import (
     HourlyFilterFrame,
     WeekdayFilterFrame
 )
-# import report_detail_frame.py
+# import report_detail_frame.py # <<< حذف شده
 # Import Persian text utility
 from persian_chart_utils import process_persian_text_for_matplotlib, set_titlebar_text
 import db_manager
 import json
-import report
 
 class ReportSelectionWindow(ctk.CTkToplevel):
     def __init__(self, parent_root, open_toplevel_windows_list):
@@ -39,9 +39,9 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         self.resizable(True, True)
 
         self.open_toplevel_windows_list.append(self)
-        self.is_editing_template = False
-        self.original_filters_before_edit = {}
-        self.editing_template_id = None
+        self.is_editing_template = False # Flag for edit mode
+        self.original_filters_before_edit = {} # To store filters before editing a template
+        self.editing_template_id = None # Store the ID of the template being edited
 
         def on_close():
             if self in self.open_toplevel_windows_list:
@@ -65,14 +65,15 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         y = (screen_height / 2) - (win_height / 2)
 
         self.geometry(f'{win_width}x{win_height}+{int(x)}+{int(y)}')
-        self.configure(fg_color="#F0F2F5")
+        self.configure(fg_color="#F0F2F5") # Light gray background for the window
 
         self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
 
         self.main_frame.grid_columnconfigure(0, weight=1)
-        self.main_frame.grid_rowconfigure(0, weight=0)
-        self.main_frame.grid_rowconfigure(1, weight=1)
+        self.main_frame.grid_rowconfigure(0, weight=0) # Header
+        #self.main_frame.grid_rowconfigure(1, weight=1) # Filler space (was detail_frame)
+        self.main_frame.grid_rowconfigure(1, weight=1) # Footer
 
         self.header_frame = ctk.CTkFrame(self.main_frame, fg_color="white", corner_radius=8)
         self.header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
@@ -113,6 +114,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         self.active_filter_frame = None
 
         # --- Filter Modules Instances ---
+        self.filter_frames["date_range"] = DateRangeFilterFrame(self.filter_content_area, on_change_callback=self._on_filter_changed)
         self.filter_frames["instruments"] = InstrumentFilterFrame(self.filter_content_area, on_change_callback=self._on_filter_changed)
         self.filter_frames["weekday"] = WeekdayFilterFrame(self.filter_content_area, on_change_callback=self._on_filter_changed)
         self.filter_frames["sessions"] = SessionFilterFrame(self.filter_content_area, on_change_callback=self._on_filter_changed)
@@ -122,10 +124,11 @@ class ReportSelectionWindow(ctk.CTkToplevel):
 
         self._create_filter_buttons()
 
+        # دکمه ذخیره فیلتر گزارش - منتقل شده به هدر، زیر ستون خلاصه فیلترها
         self.template_actions_frame = ctk.CTkFrame(self.filters_main_container, fg_color="transparent")
-        self.template_actions_frame.grid(row=1, column=0, columnspan=2, padx=0, pady=(10, 0), sticky="ew")
-        self.template_actions_frame.grid_columnconfigure(0, weight=1)
-        self.template_actions_frame.grid_columnconfigure(1, weight=1)
+        self.template_actions_frame.grid(row=1, column=0, columnspan=2, padx=0, pady=(10, 0), sticky="ew") # Changed grid to cover both filter columns
+        self.template_actions_frame.grid_columnconfigure(0, weight=1) # For save button
+        self.template_actions_frame.grid_columnconfigure(1, weight=1) # For reset/cancel button
 
         self.save_template_button = ctk.CTkButton(self.template_actions_frame,
                                                     text=process_persian_text_for_matplotlib("ذخیره فیلتر گزارش"),
@@ -143,17 +146,29 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                                                     hover_color="#5A6268")
         self.reset_cancel_button.grid(row=0, column=1, padx=(5, 10), pady=(0, 0), sticky="ew")
 
+
+        # Placeholder frame where report detail (charts) used to be. Now just a filler.
+        #self.filler_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent") # Was self.detail_frame
+        #self.filler_frame.grid(row=1, column=0, sticky="nsew", padx=0, pady=(10,0))
+        # Add a label to indicate this area is empty or for future use
+        #self.filler_label = ctk.CTkLabel(self.filler_frame, text=process_persian_text_for_matplotlib("این قسمت در آینده برای نمایش جزئیات گزارش استفاده خواهد شد."),
+        #                                     font=("Vazirmatn", 14), text_color="gray", wraplength=400, justify="right")
+        #self.filler_label.pack(expand=True)
+
+
+        # --- Footer Frame for Report Templates ---
         self.footer_frame = ctk.CTkFrame(self.main_frame, fg_color="white", corner_radius=8)
         self.footer_frame.grid(row=1, column=0, sticky="nsew", padx=0, pady=(10, 0))
         self.footer_frame.grid_columnconfigure(0, weight=1)
-        self.footer_frame.grid_rowconfigure(0, weight=0)
-        self.footer_frame.grid_rowconfigure(1, weight=1, minsize=100)
+        self.footer_frame.grid_rowconfigure(0, weight=0) # For templates title and buttons
+        self.footer_frame.grid_rowconfigure(1, weight=1, minsize=100) # For Treeview
         self.footer_frame.grid_propagate(False)
 
+        # Container for Templates Label and Buttons
         self.templates_header_frame = ctk.CTkFrame(self.footer_frame, fg_color="transparent")
         self.templates_header_frame.grid(row=0, column=0, padx=10, pady=(10,5), sticky="ew")
-        self.templates_header_frame.grid_columnconfigure(0, weight=1)
-        self.templates_header_frame.grid_columnconfigure(1, weight=2)
+        self.templates_header_frame.grid_columnconfigure(0, weight=1) # For label
+        self.templates_header_frame.grid_columnconfigure(1, weight=2) # For buttons
 
         self.templates_label = ctk.CTkLabel(self.templates_header_frame, text=process_persian_text_for_matplotlib("فیلتر‌های گزارش ذخیره شده:"),
                                             font=("Vazirmatn", 14, "bold"), text_color="#202124")
@@ -161,7 +176,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
 
         self.template_buttons_row_frame = ctk.CTkFrame(self.templates_header_frame, fg_color="transparent")
         self.template_buttons_row_frame.grid(row=0, column=1, sticky="e", padx=(10,0))
-        for i in range(5):
+        for i in range(5): # 5 buttons
             self.template_buttons_row_frame.grid_columnconfigure(i, weight=1)
 
         self.delete_template_button = ctk.CTkButton(self.template_buttons_row_frame,
@@ -171,7 +186,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                                                     state="disabled")
         self.delete_template_button.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
 
-        self.edit_template_name_button = ctk.CTkButton(self.template_buttons_row_frame,
+        self.edit_template_name_button = ctk.CTkButton(self.template_buttons_row_frame, # Renamed variable for clarity
                                                 text=process_persian_text_for_matplotlib("ویرایش نام"),
                                                 command=self._edit_template_name,
                                                 font=("Vazirmatn", 12), fg_color="#FFC107", hover_color="#E0A800",
@@ -185,7 +200,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                                                     state="disabled")
         self.copy_template_button.grid(row=0, column=2, padx=5, pady=5, sticky="ew")
 
-        self.edit_template_button = ctk.CTkButton(self.template_buttons_row_frame,
+        self.edit_template_button = ctk.CTkButton(self.template_buttons_row_frame, # This button now means "Load for Edit"
                                                 text=process_persian_text_for_matplotlib("ویرایش فیلتر"),
                                                 command=self._edit_selected_template,
                                                 font=("Vazirmatn", 12), fg_color="#28A745", hover_color="#218838",
@@ -193,8 +208,8 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         self.edit_template_button.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
         
         self.generate_report_button = ctk.CTkButton(self.template_buttons_row_frame,
-                                                    text=process_persian_text_for_matplotlib("نمایش گزارش"), #
-                                                    command=self._open_report_window_from_template, #
+                                                    text=process_persian_text_for_matplotlib("تهیه گزارش"), # From selected template
+                                                    command=self._generate_report_from_template,
                                                     font=("Vazirmatn", 12),
                                                     fg_color="#007BFF",
                                                     hover_color="#0056B3",
@@ -248,16 +263,13 @@ class ReportSelectionWindow(ctk.CTkToplevel):
 
         self.templates_tree.bind("<<TreeviewSelect>>", self._on_template_selected)
 
+        # --- نقطه کلیدی: فراخوانی update_idletasks() بعد از ساخت و چیدمان اولیه ---
         self.update_idletasks()
-        
-        # وقتی فیلتر date_range حذف میشه، باید یک فیلتر پیش‌فرض برای شروع کار انتخاب بشه
-        # مثلاً اولین فیلتر در لیست دکمه‌ها
-        if self.filter_buttons:
-            first_filter_key = list(self.filter_buttons.keys())[0]
-            self._show_filter_frame(first_filter_key)
 
+        self._show_filter_frame("date_range")
+        self.filter_frames["date_range"].initialize_dates()
         self._populate_templates_list()
-        self._reset_edit_mode_ui()
+        self._reset_edit_mode_ui() # Initialize button states
 
         self.focus_set()
         self.wait_window(self)
@@ -267,19 +279,36 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         Handles changes in any filter. This is the central point to
         trigger dependent filter reloads and summary updates.
         """
+        current_date_range = self.filter_frames["date_range"].get_selection()
         current_trade_type_filter = self.filter_frames["trade_type"].get_selection()
         current_session_filter_selection = self.filter_frames["sessions"].get_selection()
 
-        self.filter_frames["instruments"].reload_symbols() # date_range_selection parameter removed
+        # Reload instruments based on new date range
+        self.filter_frames["instruments"].reload_symbols(current_date_range)
+
+        # Reload sessions (now also gets user's timezone for display)
         self.filter_frames["sessions"].reload_sessions()
-        self.filter_frames["errors"].reload_errors(trade_type_filter=current_trade_type_filter) # date_range_selection parameter removed
+
+        # Reload errors based on new date range and trade type
+        self.filter_frames["errors"].reload_errors(current_date_range, current_trade_type_filter)
+
+        # Reload hourly filter based on selected sessions
         self.filter_frames["hourly"].reload_hourly_data(selected_sessions_from_main=current_session_filter_selection)
 
+        # Then update the summary for all filters
         self._update_filter_summary()
+        # Reset template selection when filters are changed manually
         self._clear_template_selection()
+        # Exit edit mode if filters are changed manually
+        # این قسمت رو حذف کن:
+        # if self.is_editing_template:
+        #     self.is_editing_template = False
+        #     self.editing_template_id = None
+        #     self._reset_edit_mode_ui()
 
     def _create_filter_buttons(self):
         button_texts = [
+            ("date_range", "بازه تاریخی"),
             ("instruments", "نمادها"),
             ("weekday", "روزهای هفته"),
             ("sessions", "سشن‌های معاملاتی"),
@@ -289,7 +318,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         ]
 
         base_colors = [
-            "#28A745", "#FFC107", "#6F42C1", "#DC3545", "#17A2B8", "#6C757D"
+            "#007BFF", "#28A745", "#FFC107", "#6F42C1", "#DC3545", "#17A2B8", "#6C757D"
         ]
 
         for i, (key, text) in enumerate(button_texts):
@@ -325,9 +354,9 @@ class ReportSelectionWindow(ctk.CTkToplevel):
 
     def _get_original_button_color(self, key):
         base_colors = [
-            "#28A745", "#FFC107", "#6F42C1", "#DC3545", "#17A2B8", "#6C757D"
+            "#007BFF", "#28A745", "#FFC107", "#6F42C1", "#DC3545", "#17A2B8", "#6C757D"
         ]
-        button_keys_order = ["instruments", "weekday", "sessions", "hourly", "trade_type", "errors"]
+        button_keys_order = ["date_range", "instruments", "weekday", "sessions", "hourly", "trade_type", "errors"]
         try:
             index = button_keys_order.index(key)
             return base_colors[index % len(base_colors)]
@@ -351,33 +380,82 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                 button.configure(text_color="white")
 
         self._update_filter_summary()
-        self._clear_template_selection()
+        self._clear_template_selection() # Clear selection if user manually switches tabs
 
     def _update_filter_summary(self):
         for widget in self.summary_table_frame.winfo_children():
             widget.destroy()
 
-        summary_display_limit = 3
+        summary_display_limit = 3 # Max number of buttons before 'و...'
         current_row = 0
 
+        # Define button colors for each filter category
+        # These are lightened versions of the main filter buttons
         button_category_colors = {
-            "instruments": self._lighten_color("#28A745", 85),
-            "weekday": self._lighten_color("#FFC107", 85),
-            "sessions": self._lighten_color("#6F42C1", 85),
-            "hourly": self._lighten_color("#DC3545", 85),
-            "trade_type": self._lighten_color("#17A2B8", 85),
-            "errors": self._lighten_color("#6C757D", 85)
+            "date_range": self._lighten_color("#007BFF", 85), # Blue-ish for Date Range
+            "instruments": self._lighten_color("#28A745", 85), # Green-ish for Instruments
+            "weekday": self._lighten_color("#FFC107", 85),    # Yellow-ish for Weekday
+            "sessions": self._lighten_color("#6F42C1", 85),   # Purple-ish for Sessions
+            "hourly": self._lighten_color("#DC3545", 85),     # Red-ish for Hourly
+            "trade_type": self._lighten_color("#17A2B8", 85), # Cyan-ish for Trade Type
+            "errors": self._lighten_color("#6C757D", 85)      # Gray-ish for Errors
         }
         
-        button_text_color = "#212121"
+        button_text_color = "#212121" # Dark text for light buttons
 
         all_filters_data = {}
-        # Changed: Removed "date_range" from the keys to collect.
-        for key in ["instruments", "weekday", "sessions", "hourly", "trade_type", "errors"]:
+        for key in ["date_range", "instruments", "weekday", "sessions", "hourly", "trade_type", "errors"]:
             if key in self.filter_frames:
                 all_filters_data[key] = self.filter_frames[key].get_selection()
             else:
                 all_filters_data[key] = "خطا در بارگذاری"
+
+        # --- Date Range ---
+        date_range_selection = all_filters_data['date_range']
+        date_label = ctk.CTkLabel(self.summary_table_frame, text=process_persian_text_for_matplotlib('بازه تاریخی:'),
+                                 font=("Vazirmatn", 12), text_color="#424242", anchor='e')
+        date_label.grid(row=current_row, column=1, sticky='e', padx=2, pady=1)
+
+        date_value_frame = ctk.CTkFrame(self.summary_table_frame, fg_color="transparent")
+        date_value_frame.grid(row=current_row, column=0, sticky='ew', padx=2, pady=1)
+        date_value_frame.grid_columnconfigure(0, weight=1) # To center buttons if only one
+
+        date_items = [
+            process_persian_text_for_matplotlib(date_range_selection['start_date']),
+            process_persian_text_for_matplotlib('تا'),
+            process_persian_text_for_matplotlib(date_range_selection['end_date'])
+        ]
+        
+        # Adjust layout for date buttons. Since it's fixed (from/to), no 'و...' needed.
+        # We'll use a nested frame for the buttons to control their alignment within column 0.
+        inner_date_buttons_frame = ctk.CTkFrame(date_value_frame, fg_color="transparent")
+        inner_date_buttons_frame.pack(side="right", anchor="e") # Pack to the right within its cell
+        
+        # Start Date Button
+        ctk.CTkButton(inner_date_buttons_frame,
+                        text=date_items[0],
+                        font=("Vazirmatn", 11, "bold"),
+                        fg_color=button_category_colors["date_range"],
+                        text_color=button_text_color,
+                        hover_color=button_category_colors["date_range"], # No hover effect for summary buttons
+                        corner_radius=15, width=90, height=25).pack(side="right", padx=2)
+        
+        # 'تا' Label
+        ctk.CTkLabel(inner_date_buttons_frame,
+                     text=date_items[1],
+                     font=("Vazirmatn", 11),
+                     text_color=button_text_color).pack(side="right", padx=2)
+
+        # End Date Button
+        ctk.CTkButton(inner_date_buttons_frame,
+                        text=date_items[2],
+                        font=("Vazirmatn", 11, "bold"),
+                        fg_color=button_category_colors["date_range"],
+                        text_color=button_text_color,
+                        hover_color=button_category_colors["date_range"],
+                        corner_radius=15, width=90, height=25).pack(side="right", padx=2)
+        
+        current_row += 1
 
         # --- Instruments ---
         instrument_label = ctk.CTkLabel(self.summary_table_frame, text=process_persian_text_for_matplotlib('نمادها:'),
@@ -387,6 +465,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         instruments_value_frame = ctk.CTkFrame(self.summary_table_frame, fg_color="transparent")
         instruments_value_frame.grid(row=current_row, column=0, sticky='ew', padx=2, pady=1)
         
+        # Use pack for inner buttons, aligned to the right
         inner_instruments_buttons_frame = ctk.CTkFrame(instruments_value_frame, fg_color="transparent")
         inner_instruments_buttons_frame.pack(side="right", anchor="e")
 
@@ -413,11 +492,10 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                     displayed_count += 1
                 else:
                     ctk.CTkLabel(inner_instruments_buttons_frame,
-                                 text=process_persian_text_for_matplotlib(f"و {len(selected_instruments) - displayed_count} مورد دیگر"),
+                                 text=process_persian_text_for_matplotlib(f"and {len(selected_instruments) - displayed_count} other(s)"),
                                  font=("Vazirmatn", 11), text_color=button_text_color).pack(side="right", padx=2)
                     break
         else:
-            # If no specific instruments are selected, show "هیچکدام"
             ctk.CTkButton(inner_instruments_buttons_frame,
                             text=process_persian_text_for_matplotlib('هیچکدام'),
                             font=("Vazirmatn", 11, "bold"),
@@ -466,11 +544,10 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                     displayed_count += 1
                 else:
                     ctk.CTkLabel(inner_weekday_buttons_frame,
-                                 text=process_persian_text_for_matplotlib(f"و {len(display_weekdays) - displayed_count} مورد دیگر"),
+                                 text=process_persian_text_for_matplotlib(f"and {len(display_weekdays) - displayed_count} other(s)"),
                                  font=("Vazirmatn", 11), text_color=button_text_color).pack(side="right", padx=2)
                     break
         else:
-             # If no specific weekdays are selected, show "هیچکدام"
              ctk.CTkButton(inner_weekday_buttons_frame,
                             text=process_persian_text_for_matplotlib('هیچکدام'),
                             font=("Vazirmatn", 11, "bold"),
@@ -503,7 +580,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         elif isinstance(selected_sessions, list) and selected_sessions:
             user_tz = db_manager.get_default_timezone()
             all_session_details = db_manager.get_session_times_with_display_utc(user_tz)
-            session_filter_instance = self.filter_frames["sessions"]
+            session_filter_instance = self.filter_frames["sessions"] # Access session_names_map
             
             display_sessions_texts = []
             for key in selected_sessions:
@@ -511,6 +588,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                 if details:
                     session_display_name = session_filter_instance.session_names_map.get(key, key.capitalize())
                     display_sessions_texts.append(f"{session_display_name} ({details['start_display']} - {details['end_display']})")
+
             displayed_count = 0
             for session_text in display_sessions_texts:
                 if displayed_count < summary_display_limit:
@@ -524,11 +602,10 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                     displayed_count += 1
                 else:
                     ctk.CTkLabel(inner_session_buttons_frame,
-                                 text=process_persian_text_for_matplotlib(f"و {len(display_sessions_texts) - displayed_count} مورد دیگر"),
+                                 text=process_persian_text_for_matplotlib(f"and {len(display_sessions_texts) - displayed_count} other(s)"),
                                  font=("Vazirmatn", 11), text_color=button_text_color).pack(side="right", padx=2)
                     break
         else:
-            # If no specific sessions are selected, show "هیچکدام"
             ctk.CTkButton(inner_session_buttons_frame,
                             text=process_persian_text_for_matplotlib('هیچکدام'),
                             font=("Vazirmatn", 11, "bold"),
@@ -550,6 +627,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         inner_trade_type_buttons_frame.pack(side="right", anchor="e")
 
         selected_trade_type = all_filters_data['trade_type']
+        # No 'و...' needed as it's a single selection
         display_trade_type_text = ""
         if selected_trade_type == "همه": display_trade_type_text = process_persian_text_for_matplotlib("همه انواع")
         elif selected_trade_type == "Profit": display_trade_type_text = process_persian_text_for_matplotlib("سودده")
@@ -599,11 +677,10 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                     displayed_count += 1
                 else:
                     ctk.CTkLabel(inner_error_buttons_frame,
-                                 text=process_persian_text_for_matplotlib(f"و {len(selected_errors) - displayed_count} مورد دیگر"),
+                                 text=process_persian_text_for_matplotlib(f"and {len(selected_errors) - displayed_count} other(s)"),
                                  font=("Vazirmatn", 11), text_color=button_text_color).pack(side="right", padx=2)
                     break
         else:
-            # If no specific errors are selected, show "هیچکدام"
             ctk.CTkButton(inner_error_buttons_frame,
                             text=process_persian_text_for_matplotlib('هیچکدام'),
                             font=("Vazirmatn", 11, "bold"),
@@ -628,7 +705,8 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         hourly_summary_elements = []
 
         if hourly_selection["mode"] == "full_session":
-            hourly_summary_elements.append(process_persian_text_for_matplotlib("سشن کامل"))
+            hourly_summary_elements.append(process_persian_text_for_matplotlib("Full session"))
+            # Optionally add session names if not "همه"
             if isinstance(all_filters_data['sessions'], list) and all_filters_data['sessions']:
                 user_tz = db_manager.get_default_timezone()
                 all_session_details = db_manager.get_session_times_with_display_utc(user_tz)
@@ -643,9 +721,6 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                     hourly_summary_elements.append(process_persian_text_for_matplotlib(", ".join(display_sessions_texts)))
             elif all_filters_data['sessions'] == "همه":
                 hourly_summary_elements.append(process_persian_text_for_matplotlib("همه سشن‌ها"))
-            elif not all_filters_data['sessions']: # If no sessions are selected, indicate this
-                hourly_summary_elements.append(process_persian_text_for_matplotlib(" (سشنی انتخاب نشده)"))
-
 
             ctk.CTkButton(inner_hourly_buttons_frame,
                             text=process_persian_text_for_matplotlib(" ".join(hourly_summary_elements)),
@@ -678,6 +753,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                 displayed_count = 0
                 for s_key, times in session_segments_map.items():
                     session_name = session_filter_instance.session_names_map.get(s_key, s_key.capitalize())
+                    # Display each segment part as a button if needed, or combine them
                     for t_str in times:
                         if displayed_count < summary_display_limit:
                             ctk.CTkButton(inner_hourly_buttons_frame,
@@ -690,35 +766,34 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                             displayed_count += 1
                         else:
                             ctk.CTkLabel(inner_hourly_buttons_frame,
-                                         text=process_persian_text_for_matplotlib(f"و {len(segments_data) - displayed_count} مورد دیگر"),
+                                         text=process_persian_text_for_matplotlib(f"and {len(segments_data) - displayed_count} other(s)"),
                                          font=("Vazirmatn", 11), text_color=button_text_color).pack(side="right", padx=2)
                             break
                     if displayed_count >= summary_display_limit:
                         break
             else:
                 ctk.CTkButton(inner_hourly_buttons_frame,
-                                text=process_persian_text_for_matplotlib(f"تفکیک سشن ({segment_count if segment_count else 'تعداد نامشخص'} قسمت) - بازه‌ای انتخاب نشده است."),
+                                text=process_persian_text_for_matplotlib(f"تفکیک سشن ({segment_count} قسمت) - بازه‌ای انتخاب نشده است."),
                                 font=("Vazirmatn", 11, "bold"),
                                 fg_color=button_category_colors["hourly"],
                                 text_color=button_text_color,
                                 hover_color=button_category_colors["hourly"],
                                 corner_radius=15, width=250, height=25).pack(side="right", padx=2)
 
-
-        elif hourly_selection["mode"] in ["hourly_segmentation", "half_hourly_segmentation", "quarter_hourly_segmentation"]:
-            intervals = hourly_selection.get("intervals", [])
+        elif hourly_selection["mode"] == "custom_hour_minute":
+            selected_intervals = hourly_selection.get("custom_intervals", [])
             granularity_value = hourly_selection.get("granularity")
 
             granularity_display_name_map = {
-                60: "60min",
-                30: "30min",
-                15: "15min"
+                60: process_persian_text_for_matplotlib("ساعتی کامل"),
+                30: process_persian_text_for_matplotlib("نیم‌ساعتی"),
+                15: process_persian_text_for_matplotlib("۱۵ دقیقه‌ای")
             }
             granularity_text = granularity_display_name_map.get(granularity_value, process_persian_text_for_matplotlib("ناشناس"))
             
-            # Button for Granularity (e.g., "60min")
+            # Combine granularity with initial text
             ctk.CTkButton(inner_hourly_buttons_frame,
-                            text=granularity_text,
+                            text=process_persian_text_for_matplotlib(f"تفکیک ساعت و دقیقه ({granularity_text})"),
                             font=("Vazirmatn", 11, "bold"),
                             fg_color=button_category_colors["hourly"],
                             text_color=button_text_color,
@@ -726,25 +801,24 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                             corner_radius=15, width=200, height=25).pack(side="right", padx=2)
 
             displayed_count = 0
-            if intervals:
-                for i, interval in enumerate(intervals):
-                    if displayed_count < summary_display_limit:
-                        ctk.CTkButton(inner_hourly_buttons_frame,
-                                        text=process_persian_text_for_matplotlib(f"{interval['start']}-{interval['end']}"),
-                                        font=("Vazirmatn", 11, "bold"),
-                                        fg_color=button_category_colors["hourly"],
-                                        text_color=button_text_color,
-                                        hover_color=button_category_colors["hourly"],
-                                        corner_radius=15, width=100, height=25).pack(side="right", padx=2)
-                        displayed_count += 1
-                    else:
-                        ctk.CTkLabel(inner_hourly_buttons_frame,
-                                     text=process_persian_text_for_matplotlib(f"و {len(intervals) - displayed_count} مورد دیگر"),
-                                     font=("Vazirmatn", 11), text_color=button_text_color).pack(side="right", padx=2)
-                        break
-            else:
-                # If no intervals are selected for granular mode
-                ctk.CTkButton(inner_hourly_buttons_frame,
+            for i, interval in enumerate(selected_intervals):
+                if displayed_count < summary_display_limit:
+                    ctk.CTkButton(inner_hourly_buttons_frame,
+                                    text=process_persian_text_for_matplotlib(f"{interval['start']}-{interval['end']}"),
+                                    font=("Vazirmatn", 11, "bold"),
+                                    fg_color=button_category_colors["hourly"],
+                                    text_color=button_text_color,
+                                    hover_color=button_category_colors["hourly"],
+                                    corner_radius=15, width=100, height=25).pack(side="right", padx=2)
+                    displayed_count += 1
+                else:
+                    ctk.CTkLabel(inner_hourly_buttons_frame,
+                                 text=process_persian_text_for_matplotlib(f"and {len(selected_intervals) - displayed_count} other(s)"),
+                                 font=("Vazirmatn", 11), text_color=button_text_color).pack(side="right", padx=2)
+                    break
+            
+            if not selected_intervals:
+                 ctk.CTkButton(inner_hourly_buttons_frame,
                                 text=process_persian_text_for_matplotlib("هیچ بازه‌ای انتخاب نشده است."),
                                 font=("Vazirmatn", 11, "bold"),
                                 fg_color=button_category_colors["hourly"],
@@ -758,39 +832,70 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         self.summary_table_frame.update_idletasks()
 
 
-    def _open_report_window_from_template(self): #
+    def _generate_report(self):
         """
-        فیلترهای قالب انتخاب شده را بارگذاری کرده و پنجره ReportWindow را باز می‌کند.
+        این متد فیلترهای فعلی را جمع‌آوری کرده و یک گزارش را تولید (یا نمایش می‌دهد).
+        این متد برای دکمه 'تهیه گزارش' (فیلترهای فعلی) استفاده می‌شود.
         """
-        selected_item = self.templates_tree.selection() #
-        if not selected_item: #
-            messagebox.showwarning("Warning", process_persian_text_for_matplotlib("لطفاً یک فیلتر گزارش را انتخاب کنید."), parent=self) #
-            return #
+        filters = self._get_current_filters_selection()
+        self._validate_and_process_report(filters)
 
-        template_id = int(self.templates_tree.item(selected_item[0], 'values')[0]) #
-        template_data = db_manager.get_report_template_by_id(template_id) #
+    def _generate_report_from_template(self):
+        """
+        گزارشی را بر اساس فیلتر انتخاب شده از Treeview تولید می‌کند.
+        این متد، فیلترهای فیلتر را بارگذاری کرده و سپس _validate_and_process_report را فراخوانی می‌کند.
+        """
+        selected_item = self.templates_tree.selection()
+        if not selected_item:
+            messagebox.showwarning("Warning", process_persian_text_for_matplotlib("لطفاً یک فیلتر گزارش را انتخاب کنید."))
+            return
+
+        template_id = int(self.templates_tree.item(selected_item[0], 'values')[0])
+        template_data = db_manager.get_report_template_by_id(template_id)
         if template_data and 'filters_json' in template_data:
-            # فیلترهای ذخیره شده در قالب (به جز بازه زمانی)
-            saved_filters = template_data['filters_json']
-            
-            # اضافه کردن نام قالب به فیلترها قبل از ارسال
-            saved_filters['template_name'] = template_data['name'] #
-            
-            # باز کردن پنجره گزارش جدید و ارسال فیلترها به آن
-            report.ReportWindow(self.parent_root, self.open_toplevel_windows_list, initial_filters=saved_filters)
-            
-            # بلافاصله بعد از باز شدن پنجره گزارش، انتخاب قالب را لغو کن
-            self._clear_template_selection() #
+            filters_to_load = template_data['filters_json']
+            self._validate_and_process_report(filters_to_load)
+        else:
+            messagebox.showerror("Error", process_persian_text_for_matplotlib("خطا در بارگذاری فیلتر گزارش برای تهیه گزارش."))
 
-        else: #
-            messagebox.showerror("Error", process_persian_text_for_matplotlib("خطا در بارگذاری فیلتر گزارش."), parent=self) #
+    def _validate_and_process_report(self, filters):
+        """
+        فیلترها را اعتبارسنجی کرده و عملیات نهایی تولید گزارش را انجام می‌دهد.
+        (این تابع جایگزین مستقیم فراخوانی detail_frame.update_report می‌شود)
+        """
+        date_range_selection = filters.get("date_range", {})
+        if date_range_selection:
+            try:
+                start_date_obj = datetime.strptime(date_range_selection["start_date"], '%Y-%m-%d').date()
+                end_date_obj = datetime.strptime(date_range_selection["end_date"], '%Y-%m-%d').date()
+                if start_date_obj > end_date_obj:
+                    messagebox.showwarning("Date Error", process_persian_text_for_matplotlib("تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد."))
+                    return
+            except ValueError:
+                messagebox.showerror("Date Error", process_persian_text_for_matplotlib("فرمت تاریخ نامعتبر است. لطفاً از فرمت YYYY-MM-DD استفاده کنید."))
+                return
+
+        instrument_selection = filters.get("instruments")
+        if isinstance(instrument_selection, list) and not instrument_selection:
+             messagebox.showwarning("Symbol Selection", process_persian_text_for_matplotlib("لطفاً حداقل یک نماد را انتخاب کنید."))
+             return
+        
+        # نمایش فیلترها (به عنوان یک placeholder)
+        report_summary_text = f"گزارش برای فیلترهای زیر آماده است:\n\n"
+        for key, value in filters.items():
+            report_summary_text += f"{key}: {value}\n"
+
+        # Update the filler_label to show report content summary
+        # این قسمت دیگر وجود ندارد: self.filler_label.configure(text=process_persian_text_for_matplotlib(report_summary_text))
+        messagebox.showinfo("Report Generated", process_persian_text_for_matplotlib("گزارش با فیلترهای انتخابی تولید شد. (جزئیات در کنسول)."))
+        print("Generated Report with filters:", filters)
 
     def _get_current_filters_selection(self):
         """
         تمام فیلترهای انتخاب شده از هر فریم فیلتر را جمع‌آوری و به صورت دیکشنری برمی‌گرداند.
         """
         filters = {}
-        # Changed: Removed "date_range" from filters collection.
+        filters["date_range"] = self.filter_frames["date_range"].get_selection()
         filters["instruments"] = self.filter_frames["instruments"].get_selection()
         filters["sessions"] = self.filter_frames["sessions"].get_selection()
         filters["trade_type"] = self.filter_frames["trade_type"].get_selection()
@@ -806,6 +911,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         current_filters = self._get_current_filters_selection()
 
         if self.is_editing_template and self.editing_template_id:
+            # Update existing template
             template_name = self.templates_tree.item(str(self.editing_template_id), 'values')[1]
             confirm = messagebox.askyesno("Confirm Update",
                                           process_persian_text_for_matplotlib(f"آیا مطمئن هستید که می‌خواهید فیلتر '{template_name}' را با فیلترهای فعلی به‌روزرسانی کنید؟"),
@@ -820,6 +926,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
             else:
                 messagebox.showerror("Error", process_persian_text_for_matplotlib("خطا در به‌روزرسانی فیلتر."))
         else:
+            # Save as new template
             template_name = simpledialog.askstring("Template Name",
                                                    process_persian_text_for_matplotlib("لطفاً نامی برای این فیلتر گزارش وارد کنید:"),
                                                    parent=self)
@@ -851,8 +958,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                                        values=(template['id'], process_persian_text_for_matplotlib(template['name'])),
                                        tags=('TemplateName',)
                                        )
-        self.templates_tree.selection_remove(self.templates_tree.selection())
-
+        self._clear_template_selection() # Deselects everything and disables buttons
 
     def _on_template_selected(self, event):
         """
@@ -860,8 +966,8 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         """
         selected_item = self.templates_tree.selection()
         if selected_item:
-            self.edit_template_button.configure(state="normal")
-            self.generate_report_button.configure(state="normal")
+            self.edit_template_button.configure(state="normal") # "ویرایش فیلتر"
+            self.generate_report_button.configure(state="normal") # "تهیه گزارش"
             self.edit_template_name_button.configure(state="normal")
             self.delete_template_button.configure(state="normal")
             self.copy_template_button.configure(state="normal")
@@ -883,8 +989,10 @@ class ReportSelectionWindow(ctk.CTkToplevel):
             self.copy_template_button.configure(state="disabled")
         
         if self.is_editing_template:
+            # If in edit mode, keep Save/Cancel enabled, but don't automatically reset filters
             pass
         else:
+            # In normal mode, ensure Save is enabled for new templates, Cancel is for reset
             self.save_template_button.configure(text=process_persian_text_for_matplotlib("ذخیره فیلتر گزارش"), fg_color="#007BFF", hover_color="#0056B3")
             self.reset_cancel_button.configure(text=process_persian_text_for_matplotlib("ریست فیلترها"), fg_color="#6C757D", hover_color="#5A6268")
             self.is_editing_template = False
@@ -901,7 +1009,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         self.save_template_button.configure(text=process_persian_text_for_matplotlib("ذخیره فیلتر گزارش"), fg_color="#007BFF", hover_color="#0056B3")
         self.reset_cancel_button.configure(text=process_persian_text_for_matplotlib("ریست فیلترها"), fg_color="#6C757D", hover_color="#5A6268")
         self.templates_tree.selection_remove(self.templates_tree.selection())
-        self._on_template_selected(None)
+        self._on_template_selected(None) # Call to disable other template buttons
 
 
     def _edit_selected_template(self):
@@ -916,21 +1024,23 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         template_id = int(self.templates_tree.item(selected_item[0], 'values')[0])
         template_data = db_manager.get_report_template_by_id(template_id)
         if template_data and 'filters_json' in template_data:
-            self.original_filters_before_edit = self._get_current_filters_selection()
+            self.original_filters_before_edit = self._get_current_filters_selection() # Save current filters
             self.is_editing_template = True
             self.editing_template_id = template_id
 
             filters_to_load = template_data['filters_json']
             self._apply_filters_to_ui(filters_to_load)
 
+            # Change button texts for edit mode
             self.save_template_button.configure(text=process_persian_text_for_matplotlib(f"ذخیره تغییرات فیلتر '{template_data['name']}'"),
                                                 fg_color="#28A745", hover_color="#218838")
             self.reset_cancel_button.configure(text=process_persian_text_for_matplotlib("لغو ویرایش"),
                                                fg_color="#DC3545", hover_color="#C82333")
 
             messagebox.showinfo("Edit Mode", process_persian_text_for_matplotlib(f"Template '{template_data['name']}' Loaded; edit and save!"))
+            # Clear selection in treeview to prevent accidental re-loading
             self.templates_tree.selection_remove(self.templates_tree.selection())
-            self._on_template_selected(None)
+            self._on_template_selected(None) # Disable other template buttons
         else:
             messagebox.showerror("Error", process_persian_text_for_matplotlib("خطا در بارگذاری فیلتر گزارش برای ویرایش."))
 
@@ -939,20 +1049,25 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         Applies filter data to the UI elements of each filter frame.
         This is a helper function used by _edit_selected_template and _reset_filters.
         """
-        self.filter_frames["instruments"].set_selection(filters_data.get("instruments", []))
-        self.filter_frames["sessions"].set_selection(filters_data.get("sessions", [])) # Changed default to []
+        self.filter_frames["date_range"].set_selection(
+            filters_data.get("date_range", {}).get("start_date", (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')),
+            filters_data.get("date_range", {}).get("end_date", datetime.now().strftime('%Y-%m-%d')),
+            filters_data.get("date_range", {}).get("preset", "custom")
+        )
+        self.filter_frames["instruments"].set_selection(filters_data.get("instruments", [])) # Changed default to empty list
+        self.filter_frames["sessions"].set_selection(filters_data.get("sessions", "همه"))
         self.filter_frames["trade_type"].set_selection(filters_data.get("trade_type", "همه"))
-        self.filter_frames["errors"].set_selection(filters_data.get("errors", [])) # Changed default to []
+        self.filter_frames["errors"].set_selection(filters_data.get("errors", "همه خطاها"))
 
         hourly_filter_data = filters_data.get("hourly", {})
         self.filter_frames["hourly"].set_selection(
-            mode=hourly_filter_data.get("mode", "hourly_segmentation"), # Changed default mode
+            mode=hourly_filter_data.get("mode", "full_session"),
             segments=hourly_filter_data.get("segments"),
-            intervals=hourly_filter_data.get("intervals"), # Changed from custom_intervals to intervals
+            custom_intervals=hourly_filter_data.get("custom_intervals"),
             granularity=hourly_filter_data.get("granularity")
         )
-        self.filter_frames["weekday"].set_selection(filters_data.get("weekday", db_manager.get_working_days())) # Changed default to db_manager.get_working_days()
-        self._on_filter_changed()
+        self.filter_frames["weekday"].set_selection(filters_data.get("weekday", "همه"))
+        self._on_filter_changed() # Trigger update for summary and dependent filters
 
 
     def _reset_filters(self, initial_load=False):
@@ -960,32 +1075,40 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         Resets all filters to their default state or cancels template editing.
         """
         if self.is_editing_template and not initial_load:
+            # Cancel edit mode: revert to original filters
             confirm_cancel = messagebox.askyesno("Cancel Edit",
-                                                 process_persian_text_for_matplotlib("آیا مطمئن هستید که ویرایش را لغو می‌کنید؟ هیچ تغییری ذخیره نخواهد شد!"),
+                                                 "Sure to cancel edit? No edit(s) will saved!",
                                                  parent=self)
             if confirm_cancel:
-                self._apply_filters_to_ui(self.original_filters_before_edit)
-                self._reset_edit_mode_ui()
-                messagebox.showinfo("Edit Cancelled", process_persian_text_for_matplotlib("ویرایش قالب لغو شد."))
+                self._apply_filters_to_ui(self.original_filters_before_edit) # Revert to saved filters
+                self._reset_edit_mode_ui() # Reset UI for edit mode
+                messagebox.showinfo("Edit Cancelled", "Template Edit canceled.")
             return
         
-        # Changed: Updated default selections based on the new filter logic
-        # and removed date_range as it's no longer a separate filter frame.
-        self.filter_frames["instruments"].set_selection([]) # Default to empty list (هیچکدام)
-        self.filter_frames["sessions"].set_selection([]) # Default to empty list (هیچکدام), was "همه" before
-        self.filter_frames["trade_type"].set_selection("همه") # Default to "همه"
-        self.filter_frames["errors"].set_selection([]) # Default to empty list (هیچکدام), was "همه خطاها" before
-        # For hourly, the default mode is "hourly_segmentation" which always selects all intervals once calculated.
-        # But for reset, we want to ensure it acts as if no specific interval is selected if sessions are empty.
-        # The internal logic of HourlyFilterFrame.set_selection will handle this when sessions are passed.
-        self.filter_frames["hourly"].set_selection(mode="hourly_segmentation", segments=None, intervals=None, granularity=60) # Default to hourly segmentation
-        self.filter_frames["weekday"].set_selection(db_manager.get_working_days()) # Default to user-defined working days
-        
-        self._on_filter_changed() # Trigger update after resetting all filters
+        # Reset all filters to default
+        # Date Range: Set to "last_30_days" as default
+        self.filter_frames["date_range"].current_selection_var.set("last_30_days")
+        self.filter_frames["date_range"]._set_last_n_days(30)() # Explicitly call the command to set dates
 
-        if not initial_load:
-            messagebox.showinfo("Filters Reset", process_persian_text_for_matplotlib("همه فیلترها به حالت پیش‌فرض بازنشانی شدند."))
+        # Other filters: Set to "None selected" or clear selection
+        # Note: set_selection in these filters also triggers internal updates if needed.
+        self.filter_frames["instruments"].set_selection([]) # <<< اینجا باید مطمئن بشی که لیست خالی پاس داده میشه
+        self.filter_frames["sessions"].set_selection("همه")
+        self.filter_frames["trade_type"].set_selection("همه")
+        self.filter_frames["errors"].set_selection("همه خطاها")
+        self.filter_frames["hourly"].set_selection(mode="full_session", segments=None, custom_intervals=None, granularity=None)
+        self.filter_frames["weekday"].set_selection("همه")
         
+        # Ensure internal state of hourly filter is reloaded based on default sessions.
+        # This will be handled by _on_filter_changed which is called next.
+
+        self._on_filter_changed() # Force update after resetting all
+
+        # Only show confirmation message if not initial load
+        if not initial_load:
+            messagebox.showinfo("Filters Reset", "All filters have been reset to default.")
+        
+        # Ensure edit mode UI is reset if we were in edit mode and chose to reset
         self._reset_edit_mode_ui()
         
     def _copy_template(self):
@@ -1006,17 +1129,21 @@ class ReportSelectionWindow(ctk.CTkToplevel):
             return
 
         new_name_base = original_name
+        # اطمینان حاصل کن که " (کپی)" به درستی تشخیص داده و حذف شود
         persian_copy_suffix = process_persian_text_for_matplotlib(" (کپی)")
         if new_name_base.endswith(persian_copy_suffix):
             new_name_base = new_name_base[:-len(persian_copy_suffix)].strip()
 
+        # ابتدا نام جدید را با " (کپی)" فارسی بساز
         new_name = new_name_base + persian_copy_suffix
         
         counter = 1
+        # تا زمانی که نام تکراری نباشد، به آن " (کپی X)" اضافه کن
         while not db_manager.save_report_template(new_name, template_data['filters_json']):
+            # مطمئن شو که " (کپی X)" هم به درستی فارسی پردازش شود
             new_name = new_name_base + process_persian_text_for_matplotlib(f" (کپی {counter})")
             counter += 1
-            if counter > 100:
+            if counter > 100: # جلوگیری از حلقه بی‌نهایت
                 messagebox.showerror("Error", process_persian_text_for_matplotlib("تعداد کپی‌های تکراری بیش از حد است، لطفاً نام جدید را به صورت دستی وارد کنید."))
                 return
 
@@ -1090,10 +1217,14 @@ if __name__ == "__main__":
         _mock_templates = {}
         _next_template_id = 1
 
-        def get_unique_symbols(self): # date_range parameters removed
-            print("Mock DB: Getting all unique symbols.")
-            return ["USDCAD", "EURCAD", "US30", "XAUUSD", "EURUSD", "GBPUSD", "NZDUSD", "AUDCAD"]
-
+        def get_unique_symbols(self, start_date=None, end_date=None):
+            if start_date and end_date:
+                print(f"Mock DB: Getting symbols for {start_date} to {end_date}")
+                if start_date >= "2024-07-01":
+                    return ["USDCAD", "EURCAD"]
+                else:
+                    return ["US30", "XAUUSD", "EURUSD", "GBPUSD", "NZDUSD", "AUDCAD"]
+            return ["US30", "XAUUSD", "EURUSD", "GBPUSD", "NZDUSD", "AUDCAD"]
         def get_first_trade_date(self):
             return "2023-01-01"
         def get_working_days(self):
@@ -1116,13 +1247,15 @@ if __name__ == "__main__":
         def get_trades_by_filters(self, filters):
             print(f"Mock DB: Fetching trades with filters: {filters}")
             return []
-        def get_unique_errors_by_filters(self, trade_type_filter=None): # date_range parameters removed
-            print(f"Mock DB: Getting errors for trade type {trade_type_filter}")
-            return ["اشتباه حجم زیاد", "ورود زودهنگام", "نداشتن حد ضرر"]
-
+        def get_unique_errors_by_filters(self, start_date=None, end_date=None, trade_type_filter=None):
+            print(f"Mock DB: Getting errors for date range {start_date}-{end_date} and trade type {trade_type_filter}")
+            if start_date and start_date < "2024-01-01":
+                return ["اشتباه حجم زیاد", "ورود زودهنگام", "نداشتن حد ضرر"]
+            return ["اشتباه حجم زیاد", "ورود زودهنگام"]
         def get_default_timezone(self):
             return "Asia/Tehran"
 
+        # --- Mock methods for report templates ---
         def save_report_template(self, name, filters_data):
             for tid, tdata in self._mock_templates.items():
                 if tdata['name'] == name:
@@ -1188,5 +1321,7 @@ if __name__ == "__main__":
     root_test.withdraw()
 
     mock_open_windows = []
+    # Replace this with direct instance creation for testing purposes
+    # report_selection_window.ReportSelectionWindow(root_test, mock_open_windows)
     app = ReportSelectionWindow(root_test, mock_open_windows)
     root_test.mainloop()
