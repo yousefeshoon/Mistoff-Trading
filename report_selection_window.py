@@ -25,17 +25,23 @@ import json
 import report
 
 class ReportSelectionWindow(ctk.CTkToplevel):
-    def __init__(self, parent_root, open_toplevel_windows_list):
-        super().__init__(parent_root)
-        self.parent_root = parent_root
+    # آرگومان parent_root را می‌پرفتیم اما دیگر از آن برای transient استفاده نمی‌کنیم.
+    def __init__(self, parent_root_unused, open_toplevel_windows_list, minimize_on_open=False): 
+        # super().__init__(parent_root_unused) # دیگر نیازی به ارسال parent_root به super نیست
+        super().__init__() # CTkToplevel را بدون والد Tkinter ایجاد می‌کنیم
+
+        # parent_root را همچنان ذخیره می‌کنیم تا در صورت نیاز به آن دسترسی داشته باشیم (مثلا برای messagebox parent)
+        self.parent_root = parent_root_unused
         self.open_toplevel_windows_list = open_toplevel_windows_list
 
         self.title_text = "گزارش جامع تریدها"
         self.title(process_persian_text_for_matplotlib(self.title_text))
         set_titlebar_text(self, self.title_text)
 
-        self.transient(parent_root)
-        self.grab_set()
+        # حذف transient(parent_root)
+        # self.transient(parent_root_unused) 
+        
+        self.grab_set() # grab_set همچنان کار خواهد کرد
         self.resizable(True, True)
 
         self.open_toplevel_windows_list.append(self)
@@ -44,6 +50,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         self.editing_template_id = None
 
         def on_close():
+            # این تابع همچنان بدون تغییر باقی می‌ماند چون مدیریت minimize/restore به app.py منتقل شده است.
             if self in self.open_toplevel_windows_list:
                 self.open_toplevel_windows_list.remove(self)
 
@@ -66,6 +73,10 @@ class ReportSelectionWindow(ctk.CTkToplevel):
 
         self.geometry(f'{win_width}x{win_height}+{int(x)}+{int(y)}')
         self.configure(fg_color="#F0F2F5")
+        
+        # تنظیم تم customtkinter
+        ctk.set_appearance_mode("light") # یا "dark" بسته به نیاز
+        ctk.set_default_color_theme("blue") 
 
         self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
@@ -207,10 +218,11 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         template_tree_frame.grid_columnconfigure(0, weight=1)
         template_tree_frame.grid_rowconfigure(0, weight=1)
 
-        style = ttk.Style()
-        style.theme_use("clam")
+        # ایجاد یک شیء Style محلی برای این Toplevel
+        self.local_ttk_style = ttk.Style(self) 
+        self.local_ttk_style.theme_use("clam")
 
-        style.configure("Treeview",
+        self.local_ttk_style.configure("Treeview",
                         background=ctk.ThemeManager.theme["CTkFrame"]["fg_color"][0] if ctk.get_appearance_mode() == "Light" else "#2B2B2B",
                         foreground=ctk.ThemeManager.theme["CTkLabel"]["text_color"][0] if ctk.get_appearance_mode() == "Light" else "white",
                         fieldbackground=ctk.ThemeManager.theme["CTkFrame"]["fg_color"][0] if ctk.get_appearance_mode() == "Light" else "#2B2B2B",
@@ -219,20 +231,20 @@ class ReportSelectionWindow(ctk.CTkToplevel):
                         highlightthickness=0,
                         font=("Vazirmatn", 11))
 
-        style.map('Treeview',
+        self.local_ttk_style.map('Treeview',
                   background=[('selected', '#3B8ED0')],
                   foreground=[('selected', 'white')])
 
-        style.configure("Treeview.Heading",
+        self.local_ttk_style.configure("Treeview.Heading",
                         font=("Vazirmatn", 11, "bold"),
                         background="#007BFF",
                         foreground="white",
                         padding=[10, 5],
                         relief="flat")
-        style.map("Treeview.Heading",
+        self.local_ttk_style.map("Treeview.Heading",
                   background=[('active', '#0056B3')])
 
-        style.configure("TemplateName.Treeview", font=("Vazirmatn", 13, "bold"))
+        self.local_ttk_style.configure("TemplateName.Treeview", font=("Vazirmatn", 13, "bold"))
 
         self.templates_tree = ttk.Treeview(template_tree_frame, columns=("ID", "Name"), show="headings")
         self.templates_tree.heading("ID", text="ID")
@@ -260,7 +272,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         self._reset_edit_mode_ui()
 
         self.focus_set()
-        self.wait_window(self)
+        # self.wait_window(self) # این خط در اینجا نیازی نیست چون در app.py مدیریت می‌شود
 
     def _on_filter_changed(self):
         """
@@ -554,7 +566,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         if selected_trade_type == "همه": display_trade_type_text = process_persian_text_for_matplotlib("همه انواع")
         elif selected_trade_type == "Profit": display_trade_type_text = process_persian_text_for_matplotlib("سودده")
         elif selected_trade_type == "Loss": display_trade_type_text = process_persian_text_for_matplotlib("زیان‌ده")
-        elif selected_trade_type == "RF": display_trade_type_text = process_persian_text_for_matplotlib("ریسک فری")
+        elif selected_trade_type == "RF": display_trade_type_text = process_persian_text_for_matplotlib("ریسک فری") 
 
         ctk.CTkButton(inner_trade_type_buttons_frame,
                         text=display_trade_type_text,
@@ -614,7 +626,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
         current_row += 1
 
         # --- Hourly Filter ---
-        hourly_label = ctk.CTkLabel(self.summary_table_frame, text=process_persian_text_for_matplotlib('ساعات روز:'),
+        hourly_label = ctk.CTkLabel(self.summary_table_frame, text=process_persian_text_for_matplotlib('ساعات روز:'), 
                                     font=("Vazirmatn", 12), text_color="#424242", anchor='e')
         hourly_label.grid(row=current_row, column=1, sticky='e', padx=2, pady=1)
 
@@ -777,6 +789,7 @@ class ReportSelectionWindow(ctk.CTkToplevel):
             saved_filters['template_name'] = template_data['name'] #
             
             # باز کردن پنجره گزارش جدید و ارسال فیلترها به آن
+            # از self.parent_root (که همان root اصلی است) برای والد ReportWindow استفاده می‌کنیم.
             report.ReportWindow(self.parent_root, self.open_toplevel_windows_list, initial_filters=saved_filters)
             
             # بلافاصله بعد از باز شدن پنجره گزارش، انتخاب قالب را لغو کن
@@ -1188,5 +1201,5 @@ if __name__ == "__main__":
     root_test.withdraw()
 
     mock_open_windows = []
-    app = ReportSelectionWindow(root_test, mock_open_windows)
+    app = ReportSelectionWindow(root_test, mock_open_windows, False) # در حالت تست هم minimize_on_open رو False کردم
     root_test.mainloop()

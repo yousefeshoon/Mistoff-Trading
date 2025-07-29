@@ -1,3 +1,5 @@
+# app.py
+
 import tkinter as tk
 from tkinter import messagebox, filedialog
 from tkinter import ttk
@@ -17,6 +19,7 @@ from error_widget import show_error_frequency_widget
 from tkinter import simpledialog
 import settings_manager 
 import report_selection_window 
+import customtkinter as ctk 
 
 db_manager.migrate_database()
 
@@ -41,8 +44,8 @@ main_form_width = 450
 main_form_height = 750
 
 # محاسبه موقعیت: 5% از بالا و سمت چپ (با یک فاصله مشخص)
-x_position = 50 # فاصله ثابت از لبه چپ
-y_position = int(screen_height * 0.05) # 5% از ارتفاع کل مانیتور
+x_position = 50 
+y_position = int(screen_height * 0.05) 
 
 root.geometry(f'{main_form_width}x{main_form_height}+{int(x_position)}+{int(y_position)}')
 
@@ -194,10 +197,62 @@ def add_labeled_entry(row, label_text, widget):
     label.grid(row=row, column=0, padx=5, pady=5, sticky='e')
     widget.grid(row=row, column=1, padx=5, pady=5, sticky='w')
 
-def edit_errors_window():
+# تابع اصلی ویرایش خطاها، حالا آرگومان open_toplevel_windows_list را می‌پذیرد
+def edit_errors_window(open_toplevel_windows_list=None): # <<< آرگومان جدید
     window = tk.Toplevel(root)
+    # اضافه کردن پنجره به لیست
+    if open_toplevel_windows_list is not None:
+        open_toplevel_windows_list.append(window) # <<< اضافه شده
+    
     window.title("ویرایش خطاها")
     window.geometry("400x480")
+
+    # --- تنظیمات ttk.Style برای پنجره ویرایش خطاها ---
+    # این کد تضمین می‌کند که استایل ttk برای این پنجره به درستی تنظیم شود
+    # و تحت تأثیر تغییرات style در پنجره‌های customtkinter قرار نگیرد.
+    style = ttk.Style()
+    style.theme_use("clam") # یا هر تم دیگری که با Tkinter استاندارد خوب کار کند
+    
+    # تنظیمات عمومی برای دکمه‌ها
+    style.configure("TButton",
+                    font=("Vazirmatn", 10),
+                    background="#E0E0E0", # رنگ پیش‌فرض دکمه
+                    foreground="black",
+                    padding=5)
+    style.map("TButton",
+              background=[('active', '#C0C0C0')],
+              foreground=[('active', 'black')])
+
+    # تنظیمات Treeview در پنجره ویرایش خطاها (اگه اینجا هم Treeview داری)
+    style.configure("Treeview",
+                    background="white",
+                    foreground="black",
+                    fieldbackground="white",
+                    rowheight=25, # ارتفاع ردیف‌ها را کمی کمتر کن
+                    borderwidth=1,
+                    highlightthickness=0,
+                    font=("Vazirmatn", 10))
+    style.map('Treeview',
+              background=[('selected', '#3B8ED0')],
+              foreground=[('selected', 'white')])
+    style.configure("Treeview.Heading",
+                    font=("Vazirmatn", 10, "bold"),
+                    background="#F0F0F0",
+                    foreground="black",
+                    padding=[5, 2],
+                    relief="raised")
+    style.map("Treeview.Heading",
+              background=[('active', '#D0D0D0')])
+    # --- پایان تنظیمات ttk.Style ---
+
+    # تابع برای حذف پنجره از لیست هنگام بسته شدن
+    def on_edit_errors_close():
+        if open_toplevel_windows_list is not None and window in open_toplevel_windows_list:
+            open_toplevel_windows_list.remove(window) # <<< اضافه شده
+        window.destroy()
+
+    window.protocol("WM_DELETE_WINDOW", on_edit_errors_close) # <<< اضافه شده: هندل کردن دکمه بستن
+
 
     main_edit_frame = tk.Frame(window)
     main_edit_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -208,13 +263,13 @@ def edit_errors_window():
     tree = ttk.Treeview(tree_section_frame, columns=("Error", "Count"), show="headings", height=15)
     tree.heading("Error", text="عنوان خطا")
     tree.heading("Count", text="تعداد استفاده")
-    tree.pack(fill=tk.BOTH, expand=True)
+    tree.pack(fill=tk.BOTH, expand=True) # <<< مطمئن شو expand=True هست
 
     btn_frame = tk.Frame(main_edit_frame)
-    btn_frame.pack(pady=5)
+    btn_frame.pack(pady=5) # <<< این فریم رو pack می‌کنیم
 
     add_error_section_frame = tk.Frame(main_edit_frame)
-    add_error_section_frame.pack(pady=10)
+    add_error_section_frame.pack(pady=10) # <<< این فریم رو pack می‌کنیم
 
     def refresh_edit_errors_treeview():
         for item in tree.get_children():
@@ -293,13 +348,14 @@ def edit_errors_window():
         else:
             messagebox.showwarning("هشدار", "این خطا قبلاً وجود دارد یا خطایی در ذخیره رخ داد.")
 
-    tk.Button(btn_frame, text="🗑 حذف", command=delete_selected).pack(side=tk.LEFT, padx=5)
-    tk.Button(btn_frame, text="✏️ تغییر عنوان", command=rename_selected).pack(side=tk.LEFT, padx=5)
+    # استفاده از ttk.Button برای دکمه‌ها
+    ttk.Button(btn_frame, text="🗑 حذف", command=delete_selected).pack(side=tk.LEFT, padx=5) # <<< تغییر به ttk.Button
+    ttk.Button(btn_frame, text="✏️ تغییر عنوان", command=rename_selected).pack(side=tk.LEFT, padx=5) # <<< تغییر به ttk.Button
 
     tk.Label(add_error_section_frame, text="", anchor='w').pack(side=tk.LEFT, padx=5)
     new_error_entry = tk.Entry(add_error_section_frame, width=30)
     new_error_entry.pack(side=tk.LEFT, padx=5)
-    tk.Button(add_error_section_frame, text="➕ اضافه کردن", command=add_new_error_from_edit_window).pack(side=tk.LEFT, padx=5)
+    ttk.Button(add_error_section_frame, text="➕ اضافه کردن", command=add_new_error_from_edit_window).pack(side=tk.LEFT, padx=5) # <<< تغییر به ttk.Button
 
     refresh_edit_errors_treeview()
 
@@ -447,6 +503,52 @@ select_file_btn.grid(row=0, column=2, padx=5, pady=5)
 import_report_btn = tk.Button(report_import_frame, text="وارد کردن از گزارش", command=import_trades_from_report)
 import_report_btn.grid(row=1, column=0, columnspan=3, pady=5)
 
+# ابعاد اصلی فرم را در متغیرهای سراسری ذخیره می‌کنیم
+ORIGINAL_MAIN_FORM_WIDTH = main_form_width
+ORIGINAL_MAIN_FORM_HEIGHT = main_form_height
+ORIGINAL_X_POSITION = x_position
+ORIGINAL_Y_POSITION = y_position
+
+# --- این تابع رو به بالا منتقل می‌کنیم تا قبل از استفاده ازش تعریف شده باشه ---
+def show_report_selection_window_and_restore_main():
+    # لیست پنجره‌های مینیمایز شده برای بازیابی
+    minimized_windows = [] 
+
+    # 1. پنجره اصلی (root) را قبل از هر چیز مینیمایز می‌کنیم
+    if root.winfo_exists() and root.state() == 'normal':
+        root.wm_state('iconic')
+        minimized_windows.append(root)
+
+    # 2. سایر پنجره‌های Toplevel باز شده را مینیمایز می‌کنیم
+    # یک کپی از لیست می‌گیریم تا حین iterate کردن لیست اصلی تغییر نکنه
+    for window in list(OPEN_TOPLEVEL_WINDOWS):
+        if window.winfo_exists() and window.state() == 'normal':
+            window.wm_state('iconic')
+            minimized_windows.append(window)
+
+    # 3. ReportSelectionWindow را ایجاد می‌کنیم.
+    # حالا parent_root را به None تغییر می‌دهیم تا customtkinter تلاشی برای تغییر geometry parent نکند.
+    # grab_set همچنان فقط روی پنجره جدید اثر خواهد گذاشت.
+    report_win_instance = report_selection_window.ReportSelectionWindow(None, OPEN_TOPLEVEL_WINDOWS, False) 
+    
+    # اطمینان حاصل می‌کنیم که پنجره قبل از wait_window به صورت کامل initialized شده
+    if report_win_instance.winfo_exists():
+        report_win_instance.update_idletasks()
+        root.wait_window(report_win_instance)
+    else:
+        print("Warning: ReportSelectionWindow did not get created successfully.")
+
+
+    # 4. بعد از بسته شدن ReportSelectionWindow، پنجره‌های مینیمایز شده را بازیابی می‌کنیم
+    for window in minimized_windows:
+        if window.winfo_exists(): # بررسی می‌کنیم که پنجره هنوز وجود دارد
+            window.wm_state('normal')
+            window.update_idletasks() # اطمینان از رفرش UI
+
+
+    # 5. ابعاد اصلی پنجره root را بازنشانی می‌کنیم
+    root.geometry(f'{ORIGINAL_MAIN_FORM_WIDTH}x{ORIGINAL_MAIN_FORM_HEIGHT}+{int(ORIGINAL_X_POSITION)}+{int(ORIGINAL_Y_POSITION)}')
+    root.update_idletasks() # اطمینان از اعمال تغییرات geometry
 
 # فریم افقی برای دکمه‌های اصلی
 button_frame = tk.Frame(root)
@@ -460,45 +562,18 @@ tk.Button(button_frame, text="📄 نمایش تریدها",
                                             open_toplevel_windows_list=OPEN_TOPLEVEL_WINDOWS)).pack(side=tk.LEFT, padx=5)
 
 
-def edit_errors_window_wrapper(): # <<< تابع Wrapper برای مدیریت پنجره ویرایش خطاها
-    # قبل از باز کردن پنجره، پنجره ویرایش خطاها را به لیست اضافه می‌کنیم
-    # این تابع از app.py به edit_errors_window در همان فایل فرستاده می شود.
-    # نیاز داریم تا edit_errors_window تغییر کند تا پارامتر new_window_callback را بپذیرد
-    # یا راه بهتر، مستقیماً پنجره را در لیست اضافه کنیم:
-    # (نکته: edit_errors_window در app.py تعریف شده و Toplevel خود را می‌سازد)
-    edit_errors_window(open_toplevel_windows_list=OPEN_TOPLEVEL_WINDOWS) # <<< تغییر
-
-
-# دکمه ویرایش خطاها
-tk.Button(button_frame, text="✏️ ویرایش خطاها", command=lambda: edit_errors_window_wrapper()).pack(side=tk.LEFT, padx=5)
+# دکمه ویرایش خطاها (فراخوانی مستقیم و ارسال لیست)
+tk.Button(button_frame, text="✏️ ویرایش خطاها", command=lambda: edit_errors_window(open_toplevel_windows_list=OPEN_TOPLEVEL_WINDOWS)).pack(side=tk.LEFT, padx=5)
 
 # دکمه نمایش درصد فراوانی خطاها
 tk.Button(button_frame, text="📊 فراوانی خطاها", command=lambda: show_error_frequency_widget(root, open_toplevel_windows_list=OPEN_TOPLEVEL_WINDOWS)).pack(side=tk.LEFT, padx=5)
 
 # دکمه "گزارش جامع" که به سمت راست می‌چسبد
 tk.Button(button_frame, text="📊 گزارش جامع",
-          command=lambda: report_selection_window.ReportSelectionWindow(root, OPEN_TOPLEVEL_WINDOWS),
+          command=show_report_selection_window_and_restore_main, # <<< تغییر اینجا
           bg="#A9DFBF", # رنگ پس زمینه متفاوت
           activebackground="#82CBB2" # رنگ هنگام کلیک
           ).pack(side=tk.RIGHT, padx=5) 
-
-def edit_errors_window(open_toplevel_windows_list=None): # <<< آرگومان جدید
-    window = tk.Toplevel(root)
-    # اضافه کردن پنجره به لیست
-    if open_toplevel_windows_list is not None:
-        open_toplevel_windows_list.append(window) # <<< اضافه شده
-    
-    window.title("ویرایش خطاها")
-    window.geometry("400x480")
-
-    # تابع برای حذف پنجره از لیست هنگام بسته شدن
-    def on_edit_errors_close():
-        if open_toplevel_windows_list is not None and window in open_toplevel_windows_list:
-            open_toplevel_windows_list.remove(window) # <<< اضافه شده
-        window.destroy()
-
-    window.protocol("WM_DELETE_WINDOW", on_edit_errors_close) # <<< اضافه شده: هندل کردن دکمه بستن
-
 
 
 # تعداد تریدها

@@ -981,6 +981,89 @@ def _is_trade_in_time_interval(trade_datetime_obj, start_time_str, end_time_str)
         # Trade is in interval if it's after start (on day 1) OR before end (on day 2)
         return trade_time_minutes >= interval_start_minutes or trade_time_minutes < interval_end_minutes
 
+def get_trades_by_filters(filters=None):
+    """
+    تریدهای فیلتر شده را برمی‌گرداند.
+    تاریخ‌ها را به صورت UTC و زمان‌ها را نیز به همان شکل ذخیره شده (UTC) برمی‌گرداند.
+    فیلترها را از یک دیکشنری دریافت می‌کند.
+    Args:
+        filters (dict): دیکشنری حاوی فیلترها. مثال:
+                        {'trade_type': 'Loss', 'symbol': ['US30', 'XAUUSD'], 'errors': ['اشتباه ۱', 'اشتباه ۲']}
+                        'trade_type' می‌تواند 'Profit', 'Loss', 'RF' یا 'همه انواع' باشد.
+                        'symbol' لیستی از نمادها یا 'همه' باشد.
+                        'errors' لیستی از خطاها یا 'همه خطاها' یا 'فقط با خطا' باشد.
+    Returns:
+        list: لیستی از دیکشنری‌ها، هر دیکشنری یک ترید را نمایش می‌دهد.
+    """
+    conn, cursor = connect_db()
+    trades_list = []
+    
+    # اطمینان حاصل کنید که filters یک دیکشنری است
+    if filters is None:
+        filters = {}
+
+    try:
+        query = "SELECT id, date, time, symbol, entry, exit, profit, errors, size, position_id, type, original_timezone, actual_profit_amount FROM trades WHERE 1=1"
+        params = []
+
+        # فیلتر بر اساس نوع ترید (Profit, Loss, RF, همه انواع)
+        trade_type_filter = filters.get('trade_type')
+        if trade_type_filter and trade_type_filter != "همه انواع":
+            query += " AND profit = ?"
+            params.append(trade_type_filter)
+
+        # فیلتر بر اساس نماد (symbols)
+        symbol_filter = filters.get('symbol')
+        if symbol_filter and symbol_filter != "همه":
+            if isinstance(symbol_filter, list) and symbol_filter:
+                placeholders = ','.join('?' * len(symbol_filter))
+                query += f" AND symbol IN ({placeholders})"
+                params.extend(symbol_filter)
+            elif isinstance(symbol_filter, str): # اگر یک نماد خاص ارسال شده باشد
+                 query += " AND symbol = ?"
+                 params.append(symbol_filter)
+
+        # فیلتر بر اساس خطاها (errors)
+        error_filter = filters.get('errors')
+        if error_filter:
+            if error_filter == "فقط با خطا": # برای انتخاب تریدهایی که هر خطایی دارند
+                query += " AND errors IS NOT NULL AND errors != ''"
+            elif error_filter != "همه خطاها": # برای فیلتر بر اساس خطاهای خاص
+                if isinstance(error_filter, list) and error_filter:
+                    error_clauses = []
+                    for err in error_filter:
+                        error_clauses.append("errors LIKE ?")
+                        params.append(f"%{err}%") # استفاده از LIKE برای جستجوی زیررشته‌ها
+                    query += " AND (" + " OR ".join(error_clauses) + ")"
+                elif isinstance(error_filter, str): # اگر یک خطای خاص ارسال شده باشد
+                    query += " AND errors LIKE ?"
+                    params.append(f"%{error_filter}%")
+
+        # اگر فیلترهای دیگر (مثل hourly, weekday) را هم بخواهیم اضافه کنیم، اینجا قرار می‌گیرند.
+        # فعلاً فقط همین‌ها که در error_widget استفاده شده‌اند را پوشش می‌دهیم.
+
+        query += " ORDER BY date ASC, time ASC"
+        
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        for row in rows:
+            processed_row = dict(row)
+            
+            # تبدیل مقادیر عددی به Decimal (مشابه get_all_trades)
+            for col in ['entry', 'exit', 'size', 'actual_profit_amount']:
+                if processed_row[col] is not None and processed_row[col] != '':
+                    try:
+                        processed_row[col] = Decimal(processed_row[col])
+                    except InvalidOperation:
+                        processed_row[col] = None 
+            trades_list.append(processed_row)
+            
+        return trades_list
+    except sqlite3.Error as e:
+        print(f"خطا در دریافت تریدها با فیلتر: {e}")
+        return []
+    finally:
+        conn.close()
 
 if __name__ == '__main__':
     migrate_database()
